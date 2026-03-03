@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Mic, MapPin, Pill, Stethoscope, ArrowRight, Activity, Database, MessageSquare, Volume2 } from "lucide-react";
+import { Mic, MapPin, Pill, Stethoscope, ArrowRight, Activity, Database, MessageSquare, Volume2, HeartPulse, Camera } from "lucide-react";
 import heroBg from "@/assets/hero-bg.jpg";
 
 const features = [
@@ -12,7 +12,7 @@ const features = [
   {
     icon: Stethoscope,
     title: "Medical Information",
-    description: "Get accurate clinical information about conditions, symptoms, treatments and medications on demand.",
+    description: "Get accurate clinical information about conditions, symptoms, and treatments from OpenFDA.",
   },
   {
     icon: MapPin,
@@ -20,19 +20,19 @@ const features = [
     description: "Find nearby clinics and healthcare facilities with interactive maps and contact details.",
   },
   {
-    icon: Pill,
-    title: "Medicine Availability",
-    description: "Check real-time medicine availability across pharmacies in your area.",
+    icon: Camera,
+    title: "Medicine Classifier",
+    description: "Upload a medicine strip image or speak a drug name — Gemini Vision extracts composition, category, and safety notes.",
+  },
+  {
+    icon: HeartPulse,
+    title: "Health Monitor",
+    description: "Track BP, sugar, weight and mood over time. Get AI-powered trend analysis, diet and lifestyle recommendations.",
   },
   {
     icon: Volume2,
-    title: "Voice Responses",
-    description: "Receive natural, expressive audio responses for a hands-free healthcare experience.",
-  },
-  {
-    icon: Database,
-    title: "Data Analytics",
-    description: "View cached and processed data from Redis databases for insights and monitoring.",
+    title: "Expressive Voice Responses",
+    description: "Receive natural, SSML-tuned Kokoro TTS audio responses for a hands-free clinical experience.",
   },
 ];
 
@@ -56,6 +56,13 @@ const LandingPage = () => {
             Clinical Assistant
           </Link>
           <div className="flex items-center gap-3">
+            <Link
+              to="/health-monitor"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+            >
+              <HeartPulse className="w-4 h-4" />
+              Health Monitor
+            </Link>
             <Link
               to="/data"
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"

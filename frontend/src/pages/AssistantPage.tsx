@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Activity, Wifi, AlertCircle, ArrowLeft } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -19,6 +19,7 @@ const statusConfig: Record<AppStatus, { label: string; color: string }> = {
 };
 
 const AssistantPage = () => {
+  const sessionId = useMemo(() => crypto.randomUUID(), []);
   const [status, setStatus] = useState<AppStatus>("idle");
   const [history, setHistory] = useState<ChatMessage[]>([]);
   const [selectedMsg, setSelectedMsg] = useState<ChatMessage | null>(null);
@@ -146,6 +147,7 @@ const AssistantPage = () => {
             onStatusChange={setStatus}
             onResponse={handleResponse}
             onError={handleError}
+            sessionId={sessionId}
           />
         </div>
       </div>
