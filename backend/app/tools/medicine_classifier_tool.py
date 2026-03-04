@@ -12,7 +12,7 @@ logger = get_logger(__name__)
 
 _DISCLAIMER = (
     "This information is for educational purposes only. "
-    "No dosage information is provided. "
+    "Amounts and administration instructions are not provided. "
     "Consult a licensed pharmacist or doctor before taking any medication."
 )
 
@@ -33,13 +33,13 @@ def classify_medicine(
 
     # ── Cache check for voice / text modes ────────────────────────
     if input_mode in ("voice", "text") and medicine_name:
-        key = build_cache_key("medicine_classifier", medicine_name)
+        key = build_cache_key("medicine_info", medicine_name)
         cached = get_cached_chunk(redis_db1, key)
         if cached:
             logger.info(f"Medicine classifier cache HIT: {medicine_name}")
             cached["input_mode"] = input_mode
             return ToolOutput(
-                tool_name="medicine_classifier",
+                tool_name="medicine_info",
                 result=cached,
                 medicine_data=cached,
             )
@@ -72,12 +72,12 @@ def classify_medicine(
 
         # ── Cache for voice/text only ──────────────────────────────
         if input_mode != "image" and medicine_name:
-            key = build_cache_key("medicine_classifier", medicine_name)
+            key = build_cache_key("medicine_info", medicine_name)
             store_chunk(redis_db1, key, data, ttl=settings.db1_ttl_seconds)
 
         logger.info(f"Medicine classified: {data.get('medicine_name')} via {input_mode}")
         return ToolOutput(
-            tool_name="medicine_classifier",
+            tool_name="medicine_info",
             result=data,
             medicine_data=data,
         )
@@ -94,7 +94,7 @@ def classify_medicine(
             "input_mode": input_mode,
         }
         return ToolOutput(
-            tool_name="medicine_classifier",
+            tool_name="medicine_info",
             result=fallback,
             medicine_data=fallback,
             error=str(e),
