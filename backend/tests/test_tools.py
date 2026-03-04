@@ -49,7 +49,7 @@ def test_text_mode_cache_miss_calls_gemini(db1, mock_gemini):
     """On cache miss, Gemini is called and result cached."""
     output = classify_medicine("text", "paracetamol", None, db1, mock_gemini)
     mock_gemini.classify_medicine_text.assert_called_once()
-    assert output.tool_name == "medicine_classifier"
+    assert output.tool_name == "medicine_info"
     assert output.medicine_data is not None
     assert output.medicine_data["medicine_name"] == "Paracetamol"
 
@@ -57,7 +57,7 @@ def test_text_mode_cache_miss_calls_gemini(db1, mock_gemini):
 def test_text_mode_cache_hit_skips_gemini(db1, mock_gemini):
     """On cache hit, Gemini is NOT called."""
     # Pre-populate cache
-    key = build_cache_key("medicine_classifier", "paracetamol")
+    key = build_cache_key("medicine_info", "paracetamol")
     cached_data = {
         "medicine_name": "Paracetamol",
         "chemical_composition": "Acetaminophen 500mg",
