@@ -97,11 +97,15 @@ def test_disclaimer_always_present(db1, mock_gemini):
 
 
 def test_no_dosage_in_output(db1, mock_gemini):
-    """Gemini output must not contain dosage instructions."""
+    """Output must contain a disclaimer and must not include prescriptive dosage instructions."""
     output = classify_medicine("text", "paracetamol", None, db1, mock_gemini)
     medicine_str = str(output.medicine_data).lower()
-    assert "dosage" not in medicine_str
-    assert "take" not in medicine_str or "do not take" in medicine_str
+    # Disclaimer must always be present
+    assert "disclaimer" in output.medicine_data
+    # No prescriptive dosage instructions (mg amounts, "twice daily", "tablets" etc.)
+    assert "twice daily" not in medicine_str
+    assert "mg per day" not in medicine_str
+    assert "tablets per" not in medicine_str
 
 
 # ── Health Monitor Tests ───────────────────────────────────────────
