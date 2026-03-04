@@ -32,9 +32,9 @@ def store_chunk(
     client: redis.Redis,
     key: str,
     data: dict,
-    ttl: int = settings.db1_ttl_seconds,
+    ttl: int = settings.cache_ttl_seconds,
 ) -> None:
-    """Store a chunk in Redis DB1 with TTL."""
+    """Store a chunk in Redis DB1 (tool retrieval cache) with TTL."""
     try:
         client.setex(key, ttl, json.dumps(data))
         logger.info(f"Cached key {key[:16]}... TTL={ttl}s")

@@ -7,7 +7,7 @@
 import json
 import redis
 from datetime import datetime, timezone
-from app.cache.db2_context import get_context, get_health_logs
+from app.cache.db0_context import get_context, get_health_logs
 from app.mcp.router import ToolOutput
 from app.utils.logger import get_logger
 
@@ -20,7 +20,7 @@ _DISCLAIMER = (
 )
 
 
-def generate_medical_report(session_id: str, redis_db2: redis.Redis) -> ToolOutput:
+def generate_medical_report(session_id: str, redis_db0: redis.Redis) -> ToolOutput:
     """
     Build a structured medical report for the user.
 
@@ -32,8 +32,8 @@ def generate_medical_report(session_id: str, redis_db2: redis.Redis) -> ToolOutp
     The LLM in the response_aggregator then converts this into a voice-friendly summary.
     """
     # ── Pull data from Redis DB2 ───────────────────────────────────
-    conversation_history = get_context(redis_db2, session_id)
-    health_logs = get_health_logs(redis_db2, session_id, limit=50)
+    conversation_history = get_context(redis_db0, session_id)
+    health_logs = get_health_logs(redis_db0, session_id, limit=50)
 
     # ── Summarise conversation topics ─────────────────────────────
     user_queries = [

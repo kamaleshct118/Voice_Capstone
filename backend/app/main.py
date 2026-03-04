@@ -52,20 +52,20 @@ async def lifespan(app: FastAPI):
     )
 
     # 6. Ping Redis
-    from app.cache.redis_client import redis_db1, redis_db2, ping_redis
+    from app.cache.redis_client import redis_db0, redis_db1, ping_redis
+    db0_ok = ping_redis(redis_db0)
     db1_ok = ping_redis(redis_db1)
-    db2_ok = ping_redis(redis_db2)
+    logger.info(f"Redis DB0 (history):   {'OK' if db0_ok else 'FAILED'}")
     logger.info(f"Redis DB1 (CAG cache): {'OK' if db1_ok else 'FAILED'}")
-    logger.info(f"Redis DB2 (context):   {'OK' if db2_ok else 'FAILED'}")
 
     logger.info("Startup complete. Ready to serve requests.")
     yield
 
     # ── Shutdown ───────────────────────────────────────────────────
     logger.info("Shutting down...")
-    from app.cache.redis_client import redis_db1, redis_db2
+    from app.cache.redis_client import redis_db0, redis_db1
+    redis_db0.close()
     redis_db1.close()
-    redis_db2.close()
 
 
 # ── App factory ────────────────────────────────────────────────────

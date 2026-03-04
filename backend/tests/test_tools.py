@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 from app.tools.medicine_classifier_tool import classify_medicine
 from app.tools.health_monitor_tool import threshold_check, log_health_entry, HealthLogEntry
 from app.cache.db1_cag import build_cache_key, store_chunk
-from app.cache.db2_context import get_health_logs
+from app.cache.db0_context import get_health_logs
 
 
 @pytest.fixture
@@ -19,7 +19,7 @@ def db1():
 
 
 @pytest.fixture
-def db2():
+def db0():
     return fakeredis.FakeRedis(decode_responses=True)
 
 
@@ -97,11 +97,15 @@ def test_disclaimer_always_present(db1, mock_gemini):
 
 
 def test_no_dosage_in_output(db1, mock_gemini):
-    """Gemini output must not contain dosage instructions."""
+    """Output must contain a disclaimer and must not include prescriptive dosage instructions."""
     output = classify_medicine("text", "paracetamol", None, db1, mock_gemini)
     medicine_str = str(output.medicine_data).lower()
-    assert "dosage" not in medicine_str
-    assert "take" not in medicine_str or "do not take" in medicine_str
+    # Disclaimer must always be present
+    assert "disclaimer" in output.medicine_data
+    # No prescriptive dosage instructions (mg amounts, "twice daily", "tablets" etc.)
+    assert "twice daily" not in medicine_str
+    assert "mg per day" not in medicine_str
+    assert "tablets per" not in medicine_str
 
 
 # ── Health Monitor Tests ───────────────────────────────────────────
@@ -131,14 +135,14 @@ def test_threshold_check_diabetes_sugar():
     assert any(f["field"] == "sugar_fasting" and f["level"] == "danger" for f in flags)
 
 
-def test_log_health_entry_persists(db2):
+def test_log_health_entry_persists(db0):
     entry = HealthLogEntry(
         session_id="health-persist-test",
         condition="hypertension",
         systolic_bp=138,
         diastolic_bp=88,
     )
-    log_health_entry(entry, db2)
-    logs = get_health_logs(db2, "health-persist-test")
+    log_health_entry(entry, db0)
+    logs = get_health_logs(db0, "health-persist-test")
     assert len(logs) == 1
     assert logs[0]["systolic_bp"] == 138

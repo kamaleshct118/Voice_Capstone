@@ -34,7 +34,7 @@ python-dotenv
 aiofiles
 openpyxl>=3.1.0
 
-
-pytest 
-pytest-asyncio 
-fakeredis
+# ── Testing ────────────────────────────────────────────────────────
+fakeredis>=2.20.0
+pytest>=8.0.0
+pytest-asyncio>=0.23.0

@@ -8,7 +8,7 @@
 from typing import List, Optional
 from pydantic import BaseModel
 import redis
-from app.cache.db2_context import append_health_log, get_health_logs
+from app.cache.db0_context import append_health_log, get_health_logs
 from app.llm.client import LLMClient
 from app.llm.prompts import HEALTH_ANALYSIS_PROMPT
 from app.llm.formatter import extract_json_from_response
@@ -118,13 +118,13 @@ def export_to_excel(session_id: str, log_entry: dict) -> None:
 
 # ── Log Entry ─────────────────────────────────────────────────────
 
-def log_health_entry(entry: HealthLogEntry, redis_db2: redis.Redis) -> None:
+def log_health_entry(entry: HealthLogEntry, redis_db0: redis.Redis) -> None:
     """Persist a health log entry to Redis DB2 and export to Excel."""
     from datetime import datetime, timezone
     log_dict = entry.model_dump(exclude={"session_id"})
     log_dict["timestamp"] = datetime.now(timezone.utc).isoformat()
 
-    append_health_log(redis_db2, entry.session_id, log_dict)
+    append_health_log(redis_db0, entry.session_id, log_dict)
     export_to_excel(entry.session_id, log_dict)
 
 
@@ -156,14 +156,14 @@ def threshold_check(logs: List[dict]) -> List[dict]:
 
 def analyze_health_trends(
     session_id: str,
-    redis_db2: redis.Redis,
+    redis_db0: redis.Redis,
     llm_client: LLMClient,
 ) -> dict:
     """
     Pull health logs from DB2, run threshold checks, then make ONE LLM call
     to generate a structured health summary, recommendations, and daily checklist.
     """
-    logs = get_health_logs(redis_db2, session_id, limit=30)
+    logs = get_health_logs(redis_db0, session_id, limit=30)
 
     if not logs:
         return {
@@ -231,12 +231,12 @@ def analyze_health_trends(
 
 # ── Health Monitoring Context (for health_monitoring intent) ──────
 
-def get_health_context(session_id: str, redis_db2: redis.Redis) -> ToolOutput:
+def get_health_context(session_id: str, redis_db0: redis.Redis) -> ToolOutput:
     """
     Return the last few health log entries as context for the LLM
     when the user asks a health-monitoring-specific question.
     """
-    logs = get_health_logs(redis_db2, session_id, limit=10)
+    logs = get_health_logs(redis_db0, session_id, limit=10)
     flagged = threshold_check(logs) if logs else []
 
     result = {
