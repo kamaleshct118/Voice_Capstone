@@ -20,10 +20,15 @@ const statusConfig: Record<AppStatus, { label: string; color: string }> = {
 const AssistantPage = () => {
   const sessionId = useMemo(() => crypto.randomUUID(), []);
   const [status, setStatus] = useState<AppStatus>("idle");
+  // All messages — oldest first so the feed renders top → bottom
   const [history, setHistory] = useState<ChatMessage[]>([]);
-  const [selectedMsg, setSelectedMsg] = useState<ChatMessage | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  // Scroll to bottom whenever a new message is added
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [history.length]);
 
   const handleResponse = (data: ApiResponse, query: string) => {
     const msg: ChatMessage = {
@@ -32,57 +37,59 @@ const AssistantPage = () => {
       response: data,
       timestamp: new Date(),
     };
-    setHistory((prev) => [msg, ...prev]);
-    setSelectedMsg(msg);
+    // Append — keeps all previous messages visible
+    setHistory((prev) => [...prev, msg]);
     setError(null);
   };
 
   const handleError = (msg: string) => {
     setError(msg);
+    setStatus("error");
   };
 
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-  }, [history.length]);
-
   const st = statusConfig[status];
-  const displayMsg = selectedMsg;
 
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
+        {/* Sidebar shows full history for navigation */}
         <ChatSidebar
-          history={history}
-          onSelect={setSelectedMsg}
-          activeId={selectedMsg?.id}
+          history={[...history].reverse()}   // sidebar shows newest first
+          onSelect={() => { }}                 // clicking sidebar just highlights (no-op here)
+          activeId={history[history.length - 1]?.id}
         />
+
         <div className="flex-1 flex flex-col min-h-screen">
-          {/* Header */}
+          {/* ── Header ─────────────────────────────────────────── */}
           <header className="border-b border-border bg-card/80 backdrop-blur-sm sticky top-0 z-40">
             <div className="flex items-center justify-between px-4 h-14">
               <div className="flex items-center gap-2">
                 <SidebarTrigger />
-                <Link to="/" className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground">
+                <Link
+                  to="/"
+                  className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
+                >
                   <ArrowLeft className="w-4 h-4" />
                 </Link>
-                <div>
-                  <h1 className="text-base font-bold text-foreground flex items-center gap-2">
-                    <Activity className="w-4 h-4 text-primary" />
-                    Clinical Assistant
-                  </h1>
-                </div>
+                <h1 className="text-base font-bold text-foreground flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-primary" />
+                  Clinical Assistant
+                </h1>
               </div>
-              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full text-primary-foreground ${st.color}`}>
+              <span
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full text-primary-foreground ${st.color}`}
+              >
                 <Wifi className="w-3 h-3" />
                 {st.label}
               </span>
             </div>
           </header>
 
-          {/* Chat area */}
-          <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 md:p-6">
-            <div className="max-w-2xl mx-auto space-y-4">
-              {/* Welcome when empty */}
+          {/* ── Scrollable chat feed ────────────────────────────── */}
+          <div className="flex-1 overflow-y-auto p-4 md:p-6">
+            <div className="max-w-2xl mx-auto space-y-6">
+
+              {/* Welcome screen — only when empty */}
               {history.length === 0 && !error && (
                 <motion.div
                   className="text-center py-20"
@@ -92,10 +99,13 @@ const AssistantPage = () => {
                   <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
                     <Activity className="w-8 h-8 text-primary" />
                   </div>
-                  <h2 className="text-xl font-semibold text-foreground">How can I help you?</h2>
+                  <h2 className="text-xl font-semibold text-foreground">
+                    How can I help you?
+                  </h2>
                   <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto">
-                    Speak or type to ask about medications, medical news, generate a health report,
-                    or just have a healthcare conversation.
+                    Speak or type to ask about medications, medical news,
+                    generate a health report, or just have a healthcare
+                    conversation.
                   </p>
                   <div className="mt-6 grid grid-cols-2 gap-3 max-w-sm mx-auto text-left">
                     {[
@@ -104,22 +114,18 @@ const AssistantPage = () => {
                       "Generate my health report",
                       "What's a normal blood pressure?",
                     ].map((example) => (
-                      <button
+                      <div
                         key={example}
-                        className="px-3 py-2 rounded-xl border border-border bg-card text-xs text-muted-foreground hover:text-foreground hover:border-primary/40 transition text-left"
-                        onClick={() => {
-                          // Dispatch to ChatInput by setting a synthetic event
-                          // (ChatInput manages its own state; this is a hint UX)
-                        }}
+                        className="px-3 py-2 rounded-xl border border-border bg-card text-xs text-muted-foreground select-none"
                       >
                         {example}
-                      </button>
+                      </div>
                     ))}
                   </div>
                 </motion.div>
               )}
 
-              {/* Error */}
+              {/* Error banner */}
               <AnimatePresence>
                 {error && (
                   <motion.div
@@ -134,31 +140,60 @@ const AssistantPage = () => {
                 )}
               </AnimatePresence>
 
-              {/* Selected message response */}
-              {displayMsg && (
-                <div className="space-y-3">
+              {/* ── All messages, oldest → newest ─────────────── */}
+              {history.map((msg) => (
+                <motion.div
+                  key={msg.id}
+                  className="space-y-3"
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.35 }}
+                >
                   {/* User query bubble */}
-                  <motion.div
-                    className="flex justify-end"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                  >
+                  <div className="flex justify-end">
                     <div className="px-4 py-2.5 rounded-2xl rounded-br-md bg-primary text-primary-foreground text-sm max-w-[80%]">
-                      {displayMsg.query}
+                      {msg.query}
                     </div>
-                  </motion.div>
+                  </div>
 
-                  {/* Assistant response */}
-                  <ResponseCard data={displayMsg.response} />
-                  {displayMsg.response.audio_url && (
-                    <AudioPlayer audioUrl={displayMsg.response.audio_url} />
+                  {/* Assistant response card */}
+                  <ResponseCard data={msg.response} />
+
+                  {/* Audio player */}
+                  {msg.response.audio_url && (
+                    <AudioPlayer audioUrl={msg.response.audio_url} />
                   )}
-                </div>
+                </motion.div>
+              ))}
+
+              {/* Processing indicator */}
+              {status === "processing" && (
+                <motion.div
+                  className="flex gap-1.5 px-4 py-3"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                >
+                  {[0, 1, 2].map((i) => (
+                    <motion.div
+                      key={i}
+                      className="w-2 h-2 rounded-full bg-primary"
+                      animate={{ y: [0, -6, 0] }}
+                      transition={{
+                        duration: 0.6,
+                        repeat: Infinity,
+                        delay: i * 0.15,
+                      }}
+                    />
+                  ))}
+                </motion.div>
               )}
+
+              {/* Invisible anchor — always scrolled into view */}
+              <div ref={bottomRef} />
             </div>
           </div>
 
-          {/* Input */}
+          {/* ── Input bar ──────────────────────────────────────── */}
           <ChatInput
             status={status}
             onStatusChange={setStatus}

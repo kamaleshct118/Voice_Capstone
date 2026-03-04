@@ -1,29 +1,51 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Play, Pause, Volume2 } from "lucide-react";
+
+const API_BASE = "http://localhost:8000";
 
 interface AudioPlayerProps {
   audioUrl: string;
 }
 
+/** Resolve relative /static/... URLs to the backend origin */
+const resolveUrl = (url: string) =>
+  url.startsWith("http") ? url : `${API_BASE}${url}`;
+
 const AudioPlayer = ({ audioUrl }: AudioPlayerProps) => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
+  const src = resolveUrl(audioUrl);
+
+  // Auto-play when a new audio URL arrives
+  useEffect(() => {
+    if (!audioRef.current) return;
+    audioRef.current.load();
+    audioRef.current
+      .play()
+      .then(() => setIsPlaying(true))
+      .catch(() => {
+        // Auto-play blocked by browser policy — user must click play
+        setIsPlaying(false);
+      });
+  }, [src]);
 
   const togglePlay = () => {
     if (!audioRef.current) return;
     if (isPlaying) {
       audioRef.current.pause();
+      setIsPlaying(false);
     } else {
       audioRef.current.play();
+      setIsPlaying(true);
     }
-    setIsPlaying(!isPlaying);
   };
 
   const handleTimeUpdate = () => {
     if (!audioRef.current) return;
-    const pct = (audioRef.current.currentTime / audioRef.current.duration) * 100;
+    const pct =
+      (audioRef.current.currentTime / audioRef.current.duration) * 100;
     setProgress(isNaN(pct) ? 0 : pct);
   };
 
@@ -56,6 +78,7 @@ const AudioPlayer = ({ audioUrl }: AudioPlayerProps) => {
           <Volume2 className="w-4 h-4" />
           <span>Voice Response</span>
         </div>
+        {/* Progress bar */}
         <div className="h-1.5 rounded-full bg-muted overflow-hidden">
           <motion.div
             className="h-full rounded-full bg-primary"
@@ -67,10 +90,10 @@ const AudioPlayer = ({ audioUrl }: AudioPlayerProps) => {
 
       <audio
         ref={audioRef}
-        src={audioUrl}
+        src={src}
         onTimeUpdate={handleTimeUpdate}
         onEnded={handleEnded}
-        preload="metadata"
+        preload="auto"
       />
     </motion.div>
   );

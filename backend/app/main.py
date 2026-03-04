@@ -82,10 +82,13 @@ app = FastAPI(
 )
 
 # ── CORS ───────────────────────────────────────────────────────────
+# Allow any localhost port (Vite may pick 5173, 3000, 8080, etc.)
+# In production, replace the regex with your real domain.
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins.split(","),
+    allow_origin_regex=r"http://localhost:\d+",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
