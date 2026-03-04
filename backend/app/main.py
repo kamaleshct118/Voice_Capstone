@@ -92,6 +92,9 @@ app.add_middleware(
 )
 
 # ── Static files ───────────────────────────────────────────────────
+# Create directories eagerly so StaticFiles doesn't crash on first boot.
+os.makedirs(settings.static_audio_dir, exist_ok=True)
+os.makedirs(settings.health_excel_dir, exist_ok=True)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 

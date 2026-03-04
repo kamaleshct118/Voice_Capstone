@@ -1,0 +1,30 @@
+# ── Secrets (NEVER commit these) ──────────────────────────────────
+.env
+*.env
+.env.*
+
+# ── Generated directories ──────────────────────────────────────────
+static/
+health_data/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ── Python packaging ───────────────────────────────────────────────
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── Virtual environments ───────────────────────────────────────────
+venv/
+.venv/
+env/
+
+# ── IDE / OS ───────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
