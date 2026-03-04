@@ -85,7 +85,7 @@ const ChatInput = ({ onResponse, onError, status, onStatusChange, sessionId }: C
         const data: ApiResponse = {
           text_response: `${raw.medicine_name} — ${raw.purpose}`,
           audio_url: raw.audio_url,
-          tool_type: "medicine_classifier",
+          tool_type: "medicine_info",
           medicine_data: {
             medicine_name: raw.medicine_name,
             chemical_composition: raw.chemical_composition,

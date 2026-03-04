@@ -1,3 +1,4 @@
+import React from "react";
 import { motion } from "framer-motion";
 import {
     AlertTriangle, Salad, Activity, Brain, ShieldAlert, Volume2,

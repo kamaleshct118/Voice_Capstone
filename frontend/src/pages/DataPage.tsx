@@ -77,7 +77,7 @@ const DataPage = () => {
                 }`}
             >
               <Server className="w-4 h-4" />
-              Redis DB {db === "db1" ? "1" : "2"}
+              Redis DB {db === "db1" ? "1 — Conversation Cache" : "2 — Health & Context"}
             </button>
           ))}
         </div>

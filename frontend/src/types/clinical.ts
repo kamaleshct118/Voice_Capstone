@@ -1,36 +1,18 @@
+// frontend/src/types/clinical.ts
+// ── TypeScript type definitions for the Voice AI Healthcare Assistant ──
+
+// ── Main API response from /api/process ───────────────────────────
 export interface ApiResponse {
   text_response: string;
   audio_url: string;
   tool_type: string;
-  map_data?: MapData;
   medicine_data?: MedicineData;
+  report_data?: MedicalReportData;
   latency_ms?: number;
   session_id?: string;
 }
 
-export interface MapData {
-  type?: string;
-  search_location?: string;
-  center_lat?: number;
-  center_lng?: number;
-  locations?: ClinicLocation[];
-  // Legacy single-location support
-  lat?: number;
-  lng?: number;
-  name?: string;
-  contact?: string;
-}
-
-export interface ClinicLocation {
-  name: string;
-  address?: string;
-  lat: number;
-  lng: number;
-  rating?: number;
-  open_now?: boolean;
-  phone?: string;
-}
-
+// ── Medicine Classifier Tool output ───────────────────────────────
 export interface MedicineData {
   medicine_name: string;
   chemical_composition: string;
@@ -41,6 +23,31 @@ export interface MedicineData {
   input_mode: "voice" | "text" | "image";
 }
 
+// ── Medical Report Tool output ────────────────────────────────────
+export interface MedicalReportData {
+  session_id: string;
+  generated_at: string;
+  total_interactions: number;
+  topics_discussed: string[];
+  health_metrics: {
+    total_entries?: number;
+    condition?: string;
+    latest_systolic_bp?: number;
+    latest_diastolic_bp?: number;
+    latest_fasting_sugar?: number;
+    latest_postmeal_sugar?: number;
+    latest_weight_kg?: number;
+    mood?: string;
+    symptoms?: string[];
+    notes?: string;
+  };
+  has_health_data: boolean;
+  has_conversation_data: boolean;
+  disclaimer: string;
+  audio_url?: string;
+}
+
+// ── Health Log Entry ──────────────────────────────────────────────
 export interface HealthLogEntry {
   session_id: string;
   condition: string;
@@ -54,6 +61,7 @@ export interface HealthLogEntry {
   notes?: string;
 }
 
+// ── Flagged health threshold reading ─────────────────────────────
 export interface FlaggedReading {
   timestamp: string;
   field: string;
@@ -62,28 +70,32 @@ export interface FlaggedReading {
   note?: string;
 }
 
+// ── Full health analysis result from /api/health-summary ─────────
 export interface HealthAnalysis {
   summary: string;
   flagged_readings: FlaggedReading[];
   diet_suggestions: string[];
   lifestyle_recommendations: string[];
   mental_health_guidance: string;
+  daily_checklist: string[];
   disclaimer: string;
   audio_url?: string;
   session_id?: string;
 }
 
+// ── App status for UI state machine ──────────────────────────────
 export type AppStatus = "idle" | "recording" | "processing" | "error" | "ready";
 
+// ── Intent display labels ─────────────────────────────────────────
 export const TOOL_LABELS: Record<string, string> = {
-  medical_info: "Medical Info",
+  medicine_info: "Medicine Info",
   medical_news: "Medical News",
-  nearby_clinic: "Clinic Locator",
-  medicine_classifier: "Medicine Classifier",
-  health_monitor_analysis: "Health Monitor",
-  consolidation_summary: "Session Summary",
+  medical_report: "Medical Report",
+  health_monitoring: "Health Monitoring",
+  general_conversation: "General Chat",
 };
 
+// ── Chat message in session history ──────────────────────────────
 export interface ChatMessage {
   id: string;
   query: string;

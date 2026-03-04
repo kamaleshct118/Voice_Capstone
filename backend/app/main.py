@@ -13,11 +13,13 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # ── Startup ────────────────────────────────────────────────────
-    logger.info("Starting Multimodal Voice-Orchestrated Clinical Intelligence System v2.0")
+    logger.info("Starting Voice AI Healthcare Assistant v3.0")
 
-    # 1. Create static audio directory
+    # 1. Create static audio and health data directories
     os.makedirs(settings.static_audio_dir, exist_ok=True)
+    os.makedirs(settings.health_excel_dir, exist_ok=True)
     logger.info(f"Static audio dir: {settings.static_audio_dir}")
+    logger.info(f"Health Excel dir: {settings.health_excel_dir}")
 
     # 2. Load Whisper STT model
     from faster_whisper import WhisperModel

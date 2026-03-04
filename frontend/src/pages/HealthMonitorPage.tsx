@@ -1,7 +1,10 @@
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { HeartPulse, ArrowLeft, BarChart2, Loader2, MessageSquare } from "lucide-react";
+import {
+    HeartPulse, ArrowLeft, BarChart2, Loader2, MessageSquare,
+    CheckSquare, ClipboardList, Activity
+} from "lucide-react";
 import { useHealthMonitor } from "@/hooks/useHealthMonitor";
 import HealthLogForm from "@/components/HealthLogForm";
 import HealthTrendChart from "@/components/HealthTrendChart";
@@ -24,6 +27,8 @@ const HealthMonitorPage = () => {
     const { logs, analysis, isLogging, isAnalyzing, error, logReading, getAnalysis } =
         useHealthMonitor(sessionId);
 
+    const checklist: string[] = analysis?.daily_checklist ?? [];
+
     return (
         <div className="min-h-screen bg-background">
             {/* Header */}
@@ -38,7 +43,7 @@ const HealthMonitorPage = () => {
                         </Link>
                         <div className="flex items-center gap-2">
                             <HeartPulse className="w-5 h-5 text-primary" />
-                            <h1 className="font-bold text-foreground">Long-Term Health Monitor</h1>
+                            <h1 className="font-bold text-foreground">Health Monitor Dashboard</h1>
                         </div>
                     </div>
                     <span className="text-xs text-muted-foreground hidden sm:block">
@@ -76,7 +81,7 @@ const HealthMonitorPage = () => {
                     )}
                 </AnimatePresence>
 
-                {/* ── ROW 1: Log form + Chart ── */}
+                {/* ── ROW 1: Log form + Chart ─────────────────────────── */}
                 <div className="grid lg:grid-cols-2 gap-6">
                     {/* Log Form */}
                     <div className="rounded-2xl border border-border bg-card p-5">
@@ -87,50 +92,86 @@ const HealthMonitorPage = () => {
                         <HealthLogForm onSubmit={logReading} isLoading={isLogging} />
                     </div>
 
-                    {/* Chart + Analyze */}
-                    <div className="space-y-4">
-                        <div className="rounded-2xl border border-border bg-card p-5">
-                            <h2 className="font-semibold text-foreground mb-4 flex items-center gap-2">
-                                <BarChart2 className="w-4 h-4 text-primary" />
-                                Health Trends
-                            </h2>
-                            <HealthTrendChart logs={logs} />
-                        </div>
+                    {/* Chart */}
+                    <div className="rounded-2xl border border-border bg-card p-5">
+                        <h2 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+                            <BarChart2 className="w-4 h-4 text-primary" />
+                            Health Trends
+                        </h2>
+                        <HealthTrendChart logs={logs} />
+                    </div>
+                </div>
 
-                        {/* Analyze button */}
-                        <button
-                            onClick={getAnalysis}
-                            disabled={isAnalyzing || logs.length === 0}
-                            className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:brightness-110 transition disabled:opacity-50 flex items-center justify-center gap-2"
-                        >
-                            {isAnalyzing ? (
-                                <><Loader2 className="w-4 h-4 animate-spin" /> Analysing trends...</>
-                            ) : (
-                                <>Analyse My Health Trends</>
-                            )}
-                        </button>
+                {/* ── ROW 2: Analyze button + Analysis card ──────────── */}
+                <div className="space-y-4">
+                    <button
+                        onClick={getAnalysis}
+                        disabled={isAnalyzing || logs.length === 0}
+                        className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:brightness-110 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                        {isAnalyzing ? (
+                            <><Loader2 className="w-4 h-4 animate-spin" /> Analysing trends...</>
+                        ) : (
+                            <><Activity className="w-4 h-4" /> Analyse My Health Trends</>
+                        )}
+                    </button>
 
-                        {/* Analysis card */}
-                        <AnimatePresence>
-                            {analysis && (
-                                <motion.div
-                                    className="rounded-2xl border border-border bg-card p-5"
-                                    initial={{ opacity: 0, y: 20 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    exit={{ opacity: 0 }}
-                                >
+                    <AnimatePresence>
+                        {analysis && (
+                            <motion.div
+                                className="grid lg:grid-cols-2 gap-6"
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0 }}
+                            >
+                                {/* AI Analysis Summary */}
+                                <div className="rounded-2xl border border-border bg-card p-5">
                                     <h2 className="font-semibold text-foreground mb-4 flex items-center gap-2">
                                         <HeartPulse className="w-4 h-4 text-primary" />
                                         AI Health Analysis
                                     </h2>
                                     <HealthSummaryCard analysis={analysis} />
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </div>
+                                </div>
+
+                                {/* Daily Checklist */}
+                                {checklist.length > 0 && (
+                                    <motion.div
+                                        className="rounded-2xl border border-border bg-card p-5"
+                                        initial={{ opacity: 0, x: 20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: 0.15 }}
+                                    >
+                                        <h2 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+                                            <CheckSquare className="w-4 h-4 text-emerald-400" />
+                                            Daily Checklist
+                                            <span className="text-xs text-muted-foreground font-normal ml-1">
+                                                — AI-generated for you
+                                            </span>
+                                        </h2>
+                                        <ul className="space-y-2">
+                                            {checklist.map((item, i) => (
+                                                <motion.li
+                                                    key={i}
+                                                    className="flex items-start gap-3 p-2.5 rounded-xl bg-emerald-500/5 border border-emerald-500/15 text-sm text-foreground"
+                                                    initial={{ opacity: 0, x: -10 }}
+                                                    animate={{ opacity: 1, x: 0 }}
+                                                    transition={{ delay: i * 0.07 }}
+                                                >
+                                                    <span className="mt-0.5 w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0 text-emerald-400 font-bold text-xs">
+                                                        {i + 1}
+                                                    </span>
+                                                    <span>{item}</span>
+                                                </motion.li>
+                                            ))}
+                                        </ul>
+                                    </motion.div>
+                                )}
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                 </div>
 
-                {/* ── ROW 2: Health Insights Chat (full width) ── */}
+                {/* ── ROW 3: Health Insights Chat (full width) ─────────── */}
                 <div>
                     <div className="flex items-center gap-2 mb-3">
                         <MessageSquare className="w-4 h-4 text-primary" />

@@ -1,3 +1,9 @@
+# app/mcp/router.py
+# ── MCP — Model Control Plane ──────────────────────────────────────
+# Receives classified intent and routes to the correct tool.
+# Returns structured ToolOutput for the response aggregator.
+# ──────────────────────────────────────────────────────────────────
+
 from typing import List, Optional
 import redis
 from pydantic import BaseModel
@@ -10,8 +16,8 @@ logger = get_logger(__name__)
 class ToolOutput(BaseModel):
     tool_name: str
     result: dict
-    map_data: Optional[dict] = None
     medicine_data: Optional[dict] = None
+    report_data: Optional[dict] = None
     error: Optional[str] = None
 
 
@@ -22,44 +28,64 @@ async def route_to_tools(
     session_id: str,
     gemini_client=None,
 ) -> List[ToolOutput]:
-    """Route the classified intent to the appropriate tool function."""
+    """
+    Route the classified intent to the appropriate tool.
+
+    Intent → Tool mapping
+    ─────────────────────────────────────────────────────
+    medicine_info        → medicine_classifier_tool
+    medical_news         → news_tool
+    medical_report       → report_tool
+    health_monitoring    → health_monitor_tool (context Q&A)
+    general_conversation → (no tool — LLM handles directly)
+    """
     intent = intent_result.intent
     entities = intent_result.entities
 
-    logger.info(f"Routing intent '{intent}' for session {session_id}")
+    logger.info(f"[MCP] Routing intent='{intent}' session={session_id}")
 
     try:
-        if intent == "medical_info":
-            from app.tools.medical_api_tool import get_medical_info
-            return [get_medical_info(entities, redis_db1)]
-
-        elif intent == "medical_news":
-            from app.tools.news_tool import get_medical_news
-            return [get_medical_news(entities, redis_db1)]
-
-        elif intent == "nearby_clinic":
-            from app.tools.nearby_clinic_tool import find_nearby_clinics
-            return [find_nearby_clinics(entities)]
-
-        elif intent == "medicine_classifier":
+        # ── Tool 1: Medicine Description & Classifier ──────────────
+        if intent == "medicine_info":
             from app.tools.medicine_classifier_tool import classify_medicine
             drug_name = entities.get("drug") or intent_result.raw_transcript
             return [classify_medicine(
-                input_mode="voice",
+                input_mode="text",
                 medicine_name=drug_name,
                 image_bytes=None,
                 redis_db1=redis_db1,
                 gemini_client=gemini_client,
             )]
 
-        elif intent == "consolidation_summary":
-            from app.tools.consolidation_tool import consolidate_disease_info
-            return [consolidate_disease_info(entities, redis_db2, session_id)]
+        # ── Tool 2: Medical & Pharmaceutical News ─────────────────
+        elif intent == "medical_news":
+            from app.tools.news_tool import get_medical_news
+            return [get_medical_news(entities, redis_db1)]
+
+        # ── Tool 3: Medical Report Generation ────────────────────
+        elif intent == "medical_report":
+            from app.tools.report_tool import generate_medical_report
+            return [generate_medical_report(session_id, redis_db2)]
+
+        # ── Health Monitoring Q&A ─────────────────────────────────
+        elif intent == "health_monitoring":
+            from app.tools.health_monitor_tool import get_health_context
+            return [get_health_context(session_id, redis_db2)]
+
+        # ── General Conversation — no external tool needed ────────
+        elif intent == "general_conversation":
+            return [ToolOutput(
+                tool_name="general_conversation",
+                result={"context": "general", "transcript": intent_result.raw_transcript},
+            )]
 
         else:
-            logger.warning(f"Unknown intent '{intent}', returning empty result")
-            return [ToolOutput(tool_name="unknown", result={"message": "Could not determine intent"})]
+            logger.warning(f"[MCP] Unrecognised intent '{intent}', falling back to general_conversation")
+            return [ToolOutput(
+                tool_name="general_conversation",
+                result={"context": "general", "transcript": intent_result.raw_transcript},
+            )]
 
     except Exception as e:
-        logger.error(f"Tool routing error for intent '{intent}': {e}")
+        logger.error(f"[MCP] Tool routing error for intent '{intent}': {e}")
         return [ToolOutput(tool_name=intent, result={}, error=str(e))]

@@ -1,38 +1,47 @@
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Mic, MapPin, Pill, Stethoscope, ArrowRight, Activity, Database, MessageSquare, Volume2, HeartPulse, Camera } from "lucide-react";
+import {
+  Mic, Pill, Activity, ArrowRight, Database,
+  MessageSquare, Volume2, HeartPulse, Newspaper, ClipboardList,
+} from "lucide-react";
 import heroBg from "@/assets/hero-bg.jpg";
 
 const features = [
   {
     icon: Mic,
     title: "Voice & Text Input",
-    description: "Speak or type your medical queries. Our AI processes natural language to understand your needs instantly.",
+    description:
+      "Speak or type your healthcare queries. Faster-Whisper STT converts voice to text instantly with high accuracy.",
   },
   {
-    icon: Stethoscope,
-    title: "Medical Information",
-    description: "Get accurate clinical information about conditions, symptoms, and treatments from OpenFDA.",
-  },
-  {
-    icon: MapPin,
-    title: "Clinic Locator",
-    description: "Find nearby clinics and healthcare facilities with interactive maps and contact details.",
-  },
-  {
-    icon: Camera,
+    icon: Pill,
     title: "Medicine Classifier",
-    description: "Upload a medicine strip image or speak a drug name — Gemini Vision extracts composition, category, and safety notes.",
+    description:
+      "Ask about any medicine by name or upload an image. Gemini Vision extracts composition, category, and safety notes.",
+  },
+  {
+    icon: Newspaper,
+    title: "Medical News",
+    description:
+      "Get the latest developments in healthcare, pharmaceutical industry, and medical research — summarized by AI.",
+  },
+  {
+    icon: ClipboardList,
+    title: "Medical Report Generator",
+    description:
+      "Generate a structured health summary from your stored session data, health logs, and previous interactions.",
   },
   {
     icon: HeartPulse,
-    title: "Health Monitor",
-    description: "Track BP, sugar, weight and mood over time. Get AI-powered trend analysis, diet and lifestyle recommendations.",
+    title: "Health Monitor Dashboard",
+    description:
+      "Track BP, blood sugar, weight, and mood daily. Get AI trend analysis, diet suggestions, and a personalized daily checklist.",
   },
   {
     icon: Volume2,
     title: "Expressive Voice Responses",
-    description: "Receive natural, SSML-tuned Kokoro TTS audio responses for a hands-free clinical experience.",
+    description:
+      "Receive natural TTS audio responses with SSML-tuned prosody — different speech styles per tool output.",
   },
 ];
 
@@ -53,7 +62,7 @@ const LandingPage = () => {
         <div className="container max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2 font-bold text-foreground">
             <Activity className="w-5 h-5 text-primary" />
-            Clinical Assistant
+            Voice Healthcare AI
           </Link>
           <div className="flex items-center gap-3">
             <Link
@@ -94,16 +103,16 @@ const LandingPage = () => {
           >
             <span className="inline-flex items-center gap-2 px-3 py-1 text-xs font-semibold rounded-full bg-primary/10 text-primary mb-6">
               <Activity className="w-3.5 h-3.5" />
-              AI-Powered Healthcare
+              AI-Powered Healthcare Assistant
             </span>
             <h1 className="text-4xl md:text-6xl font-bold text-foreground tracking-tight leading-tight">
-              Voice-Driven Clinical
+              Voice-Driven
               <br />
-              <span className="text-primary">Information Assistant</span>
+              <span className="text-primary">Healthcare AI Assistant</span>
             </h1>
             <p className="mt-6 text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-              Speak or type to get instant medical information, locate nearby clinics,
-              check medicine availability, and receive AI-powered clinical guidance.
+              Ask about medicines, get medical news, generate health reports, and monitor
+              your daily vitals — all through voice or text with natural TTS responses.
             </p>
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
@@ -114,14 +123,44 @@ const LandingPage = () => {
                 Start Consultation
               </Link>
               <Link
-                to="/data"
+                to="/health-monitor"
                 className="inline-flex items-center gap-2 px-6 py-3 text-base font-medium rounded-xl bg-card text-foreground border border-border hover:bg-muted transition"
               >
-                <Database className="w-5 h-5" />
-                View Data
+                <HeartPulse className="w-5 h-5" />
+                Health Dashboard
               </Link>
             </div>
           </motion.div>
+        </div>
+      </section>
+
+      {/* System Flow */}
+      <section className="py-14 border-y border-border bg-muted/20">
+        <div className="container max-w-5xl mx-auto px-4 text-center">
+          <p className="text-sm font-semibold text-muted-foreground uppercase tracking-widest mb-6">
+            System Pipeline
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-2 text-sm">
+            {[
+              "Voice / Text Input",
+              "Whisper STT",
+              "LLM Intent Analysis",
+              "MCP Tool Orchestration",
+              "Redis Cache",
+              "LLM Response",
+              "SSML Formatting",
+              "TTS Audio Output",
+            ].map((step, i, arr) => (
+              <span key={step} className="flex items-center gap-2">
+                <span className="px-3 py-1.5 rounded-full bg-primary/10 text-primary font-medium text-xs">
+                  {step}
+                </span>
+                {i < arr.length - 1 && (
+                  <ArrowRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                )}
+              </span>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -131,7 +170,7 @@ const LandingPage = () => {
           <div className="text-center mb-14">
             <h2 className="text-3xl font-bold text-foreground">Key Features</h2>
             <p className="mt-3 text-muted-foreground">
-              Everything you need for clinical information and coordination
+              Everything you need for intelligent, voice-enabled healthcare assistance
             </p>
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -149,7 +188,9 @@ const LandingPage = () => {
                   <f.icon className="w-6 h-6 text-primary" />
                 </div>
                 <h3 className="text-lg font-semibold text-foreground">{f.title}</h3>
-                <p className="mt-2 text-sm text-muted-foreground leading-relaxed">{f.description}</p>
+                <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+                  {f.description}
+                </p>
               </motion.div>
             ))}
           </div>
@@ -159,7 +200,8 @@ const LandingPage = () => {
       {/* Footer */}
       <footer className="border-t border-border py-8">
         <div className="container max-w-6xl mx-auto px-4 text-center text-sm text-muted-foreground">
-          © 2026 Clinical Assistant. Built for better healthcare coordination.
+          © 2026 Voice Healthcare AI · Capstone Project ·{" "}
+          <span className="text-primary">Whisper + Groq/Gemini + Kokoro TTS + Redis</span>
         </div>
       </footer>
     </div>

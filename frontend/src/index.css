@@ -1,8 +1,9 @@
+@import "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@import "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
 
 @layer base {
   :root {

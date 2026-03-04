@@ -1,3 +1,14 @@
+# app/api/routes.py
+# ── API Routes ─────────────────────────────────────────────────────
+# Exposes the full pipeline endpoints:
+#   POST /api/process          - Main voice+text pipeline (intent → MCP → LLM → TTS)
+#   POST /api/classify-medicine - Dedicated medicine classifier (text/voice/image)
+#   POST /api/health-log       - Log a health reading (Redis DB2 + Excel)
+#   GET  /api/health-summary/{session_id} - AI health trend analysis + daily checklist
+#   POST /api/health-chat      - Conversational chat about logged health data
+#   GET  /api/medical-report/{session_id} - Generate a structured medical report
+# ──────────────────────────────────────────────────────────────────
+
 import os
 import time
 from uuid import uuid4
@@ -25,8 +36,8 @@ class ProcessResponse(BaseModel):
     text_response: str
     audio_url: str
     tool_type: str
-    map_data: Optional[dict] = None
     medicine_data: Optional[dict] = None
+    report_data: Optional[dict] = None
     latency_ms: int
     session_id: str
 
@@ -58,7 +69,7 @@ class HealthLogRequest(BaseModel):
 
 # ── Helpers ────────────────────────────────────────────────────────
 
-def _save_audio_file(audio_array, kokoro_engine, ssml_text: str) -> str:
+def _save_audio_file(kokoro_engine, ssml_text: str) -> str:
     """Synthesize TTS and save to static/audio. Returns relative URL."""
     filename = f"{uuid4()}.wav"
     output_path = os.path.join(settings.static_audio_dir, filename)
@@ -72,7 +83,11 @@ def _save_audio_file(audio_array, kokoro_engine, ssml_text: str) -> str:
 async def process_query(request: Request):
     """
     Main pipeline: accepts voice (multipart) or text (JSON).
-    Full flow: VAD → STT → Tone → Intent → Tools → Context → LLM → SSML → TTS
+
+    Full flow:
+    VAD → STT → Tone Analysis → Intent Classification
+    → MCP Tool Routing → Redis Cache → LLM Response
+    → SSML Formatting (per-intent tone) → TTS → Audio URL
     """
     metrics = RequestMetrics()
     session_id = str(uuid4())
@@ -120,26 +135,24 @@ async def process_query(request: Request):
     # ── Tone analysis ──────────────────────────────────────────────
     tone_result = tone_analysis.analyze_tone(transcript)
 
-    # ── Intent classification ──────────────────────────────────────
+    # ── Intent classification → LLM ───────────────────────────────
     t0 = time.perf_counter()
     intent_result = intent_classifier.classify_intent(transcript, llm_client)
     metrics.intent_ms = int((time.perf_counter() - t0) * 1000)
 
-    # ── Tool execution ─────────────────────────────────────────────
+    # ── MCP Tool Orchestration ─────────────────────────────────────
     t0 = time.perf_counter()
     tool_outputs = await mcp_router.route_to_tools(
         intent_result, redis_db1, redis_db2, session_id, gemini_client
     )
     metrics.tool_ms = int((time.perf_counter() - t0) * 1000)
-    metrics.cache_hit = any(
-        o.error is None and o.result for o in tool_outputs
-    )
+    metrics.cache_hit = any(o.error is None and o.result for o in tool_outputs)
 
-    # ── Context update ─────────────────────────────────────────────
+    # ── Context update (Redis DB2) ─────────────────────────────────
     db2_context.append_context(redis_db2, session_id, "user", transcript)
     context_history = db2_context.get_context(redis_db2, session_id)
 
-    # ── Response aggregation (ONE final LLM call) ──────────────────
+    # ── LLM Response Generation ────────────────────────────────────
     t0 = time.perf_counter()
     text_response = response_aggregator.aggregate_response(
         tool_outputs, intent_result, context_history, llm_client
@@ -148,24 +161,30 @@ async def process_query(request: Request):
 
     db2_context.append_context(redis_db2, session_id, "assistant", text_response)
 
-    # ── SSML + TTS ─────────────────────────────────────────────────
+    # ── SSML Formatting: per-intent tone ──────────────────────────
+    # medicine_info → informative | medical_news → neutral
+    # medical_report → structured | health_monitoring → informative
+    # general_conversation → neutral
+    ssml_tone = response_aggregator.get_ssml_tone(intent_result.intent)
     t0 = time.perf_counter()
-    ssml = ssml_builder.build_ssml(text_response, tone_result.tone)
-    audio_url = _save_audio_file(None, kokoro_engine, ssml)
+    ssml = ssml_builder.build_ssml(text_response, ssml_tone)
+
+    # ── TTS Synthesis ──────────────────────────────────────────────
+    audio_url = _save_audio_file(kokoro_engine, ssml)
     metrics.tts_ms = int((time.perf_counter() - t0) * 1000)
 
     record_latency(metrics, session_id)
 
-    # Extract map/medicine data from tool outputs
-    map_data = next((o.map_data for o in tool_outputs if o.map_data), None)
+    # Extract medicine / report data from tool outputs
     medicine_data = next((o.medicine_data for o in tool_outputs if o.medicine_data), None)
+    report_data = next((o.report_data for o in tool_outputs if o.report_data), None)  # type: ignore[attr-defined]
 
     return ProcessResponse(
         text_response=text_response,
         audio_url=audio_url,
         tool_type=intent_result.intent,
-        map_data=map_data,
         medicine_data=medicine_data,
+        report_data=report_data,
         latency_ms=metrics.total_ms,
         session_id=session_id,
     )
@@ -185,6 +204,9 @@ async def classify_medicine_endpoint(
     """
     Dedicated medicine classifier endpoint.
     Modes: 'voice' → STT → Gemini text | 'text' → Gemini text | 'image' → Gemini Vision
+
+    Returns: medicine name, category, purpose, safety notes + TTS audio.
+    SSML tone: informative (educational delivery).
     """
     sid = session_id or str(uuid4())
     kokoro_engine = request.app.state.kokoro_engine
@@ -214,7 +236,7 @@ async def classify_medicine_endpoint(
 
     data = tool_output.medicine_data or tool_output.result
 
-    # Build SSML response
+    # Build TTS using informative tone (medicine explanation)
     voice_text = (
         f"{data.get('medicine_name', 'This medicine')} is a "
         f"{data.get('drug_category', 'medication')}. "
@@ -223,7 +245,7 @@ async def classify_medicine_endpoint(
         f"Please consult a pharmacist for personal advice."
     )
     ssml = ssml_builder.build_ssml(voice_text, "informative")
-    audio_url = _save_audio_file(None, kokoro_engine, ssml)
+    audio_url = _save_audio_file(kokoro_engine, ssml)
 
     return MedicineClassifierResponse(
         medicine_name=data.get("medicine_name", "Unknown"),
@@ -242,7 +264,10 @@ async def classify_medicine_endpoint(
 
 @router.post("/health-log")
 async def log_health(entry: HealthLogRequest):
-    """Log a health reading to Redis DB2."""
+    """
+    Log a health reading to Redis DB2 (conversation cache) and Excel.
+    Supports: blood pressure, blood sugar, weight, mood, symptoms, notes.
+    """
     from app.tools.health_monitor_tool import HealthLogEntry, log_health_entry
     health_entry = HealthLogEntry(**entry.model_dump())
     log_health_entry(health_entry, redis_db2)
@@ -253,21 +278,70 @@ async def log_health(entry: HealthLogRequest):
 
 @router.get("/health-summary/{session_id}")
 async def get_health_summary(session_id: str, request: Request):
-    """Retrieve trend analysis + voice summary for a session's health logs."""
+    """
+    Retrieve AI trend analysis + daily checklist for a session's health logs.
+
+    Returns:
+    - summary, flagged_readings, diet_suggestions, lifestyle_recommendations
+    - daily_checklist (personalized tasks for the user)
+    - audio_url (TTS using informative SSML tone)
+    """
     llm_client = request.app.state.llm_client
     kokoro_engine = request.app.state.kokoro_engine
 
     from app.tools.health_monitor_tool import analyze_health_trends
     analysis = analyze_health_trends(session_id, redis_db2, llm_client)
 
-    # Generate voice summary
+    # TTS summary using informative tone
     summary_text = analysis.get("summary", "No trends detected yet.")
     ssml = ssml_builder.build_ssml(summary_text, "informative")
-    audio_url = _save_audio_file(None, kokoro_engine, ssml)
+    audio_url = _save_audio_file(kokoro_engine, ssml)
 
     analysis["audio_url"] = audio_url
     analysis["session_id"] = session_id
     return analysis
+
+
+# ── GET /api/medical-report/{session_id} ──────────────────────────
+
+@router.get("/medical-report/{session_id}")
+async def get_medical_report(session_id: str, request: Request):
+    """
+    Generate a structured medical report from stored user data.
+
+    Pulls:
+    - Conversation history (topics discussed)
+    - Health log entries (logged metrics)
+
+    Returns a structured report dict + TTS audio (structured SSML tone).
+    """
+    from app.tools.report_tool import generate_medical_report
+    kokoro_engine = request.app.state.kokoro_engine
+
+    tool_output = generate_medical_report(session_id, redis_db2)
+    report = tool_output.report_data or tool_output.result
+
+    # Build voice summary of the report using structured tone
+    if report.get("has_health_data") or report.get("has_conversation_data"):
+        total = report.get("health_metrics", {}).get("total_entries", 0)
+        topics_count = len(report.get("topics_discussed", []))
+        voice_text = (
+            f"Your health report is ready. "
+            f"You have {total} health log entries and {topics_count} conversation interactions recorded. "
+            f"Please review the details on screen. "
+            f"Remember to consult a qualified healthcare provider for medical decisions."
+        )
+    else:
+        voice_text = (
+            "Your health report is empty. "
+            "Start by logging health readings or asking health questions in the assistant."
+        )
+
+    ssml = ssml_builder.build_ssml(voice_text, "structured")
+    audio_url = _save_audio_file(kokoro_engine, ssml)
+
+    report["audio_url"] = audio_url
+    return report
 
 
 # ── POST /api/health-chat ──────────────────────────────────────────
@@ -287,8 +361,9 @@ class HealthChatResponse(BaseModel):
 async def health_chat(body: HealthChatRequest, request: Request):
     """
     Conversational chat about the user's own health logs.
+
     Retrieves health history from Redis DB2 and uses it as LLM context.
-    Returns a text insight + TTS audio.
+    Returns a text insight + TTS audio (informative SSML tone).
     """
     import json
     from app.llm.prompts import HEALTH_CHAT_PROMPT
@@ -301,14 +376,12 @@ async def health_chat(body: HealthChatRequest, request: Request):
     logs = db2_context.get_health_logs(redis_db2, body.session_id, limit=20)
     chat_history = db2_context.get_context(redis_db2, f"healthchat:{body.session_id}")
 
-    # ── Build context for LLM ──────────────────────────────────────
     logs_text = (
         json.dumps(logs, indent=None)[:2000]
         if logs
         else "No health readings have been logged yet for this session."
     )
 
-    # Build conversation messages
     messages = [
         {
             "role": "system",
@@ -319,13 +392,11 @@ async def health_chat(body: HealthChatRequest, request: Request):
         }
     ]
 
-    # Include last 6 chat turns for continuity
     for turn in chat_history[-6:]:
         messages.append({"role": turn["role"], "content": turn["content"]})
 
     messages.append({"role": "user", "content": body.message})
 
-    # ── ONE LLM call ───────────────────────────────────────────────
     raw = llm_client.chat(messages, max_tokens=300)
     ai_response = truncate_response(strip_markdown(raw), max_chars=600)
 
@@ -334,9 +405,9 @@ async def health_chat(body: HealthChatRequest, request: Request):
     db2_context.append_context(redis_db2, chat_key, "user", body.message, max_turns=20)
     db2_context.append_context(redis_db2, chat_key, "assistant", ai_response, max_turns=20)
 
-    # ── TTS ────────────────────────────────────────────────────────
+    # ── TTS (informative tone for health conversations) ────────────
     ssml = ssml_builder.build_ssml(ai_response, "informative")
-    audio_url = _save_audio_file(None, kokoro_engine, ssml)
+    audio_url = _save_audio_file(kokoro_engine, ssml)
 
     logger.info(f"Health chat response for session {body.session_id}")
 

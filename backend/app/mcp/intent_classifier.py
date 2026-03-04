@@ -6,12 +6,13 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+# Five clean intents matching the architecture spec
 VALID_INTENTS = {
-    "medical_info",
-    "medical_news",
-    "nearby_clinic",
-    "medicine_classifier",
-    "consolidation_summary",
+    "medicine_info",        # Ask about a medicine by name or image
+    "medical_news",         # Latest medical / pharmaceutical news
+    "medical_report",       # Generate a summary report of the user's stored health data
+    "general_conversation", # General health Q&A / chitchat
+    "health_monitoring",    # Health-metric-specific queries (BP, sugar, etc.)
 }
 
 
@@ -35,10 +36,10 @@ def classify_intent(transcript: str, llm_client: LLMClient) -> IntentResult:
         intent = parsed["intent"]
         entities = parsed.get("entities", {})
     else:
-        # Safe fallback
-        intent = "medical_info"
+        # Safe fallback — general_conversation handles open-ended replies
+        intent = "general_conversation"
         entities = {}
-        logger.warning(f"Intent fallback to medical_info. Raw: {raw[:80]}")
+        logger.warning(f"Intent fallback to general_conversation. Raw: {raw[:80]}")
 
     logger.info(f"Intent: {intent} | Entities: {entities}")
     return IntentResult(intent=intent, entities=entities, raw_transcript=transcript)

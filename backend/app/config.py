@@ -28,14 +28,13 @@ class Settings(BaseSettings):
     max_audio_duration_sec: int = 60
     audio_sample_rate: int = 16000
 
-    # ── External APIs ──────────────────────────────────────────────
     medical_api_base_url: str = "https://api.fda.gov/drug"
     news_api_key: str = "placeholder"
-    maps_api_key: str = "placeholder"
 
     # ── Server ─────────────────────────────────────────────────────
     allowed_origins: str = "http://localhost:5173,http://localhost:3000"
     static_audio_dir: str = "static/audio"
+    health_excel_dir: str = "health_data"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

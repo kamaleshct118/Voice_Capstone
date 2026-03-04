@@ -1,3 +1,4 @@
+import React from "react";
 import { motion } from "framer-motion";
 import { Pill, FlaskConical, Shield, Info, AlertTriangle } from "lucide-react";
 import type { MedicineData } from "@/types/clinical";

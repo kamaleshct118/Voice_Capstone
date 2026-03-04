@@ -7,7 +7,6 @@ import ChatSidebar from "@/components/ChatSidebar";
 import ChatInput from "@/components/ChatInput";
 import ResponseCard from "@/components/ResponseCard";
 import AudioPlayer from "@/components/AudioPlayer";
-import MapPopup from "@/components/MapPopup";
 import type { ApiResponse, AppStatus, ChatMessage } from "@/types/clinical";
 
 const statusConfig: Record<AppStatus, { label: string; color: string }> = {
@@ -24,7 +23,6 @@ const AssistantPage = () => {
   const [history, setHistory] = useState<ChatMessage[]>([]);
   const [selectedMsg, setSelectedMsg] = useState<ChatMessage | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showMap, setShowMap] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const handleResponse = (data: ApiResponse, query: string) => {
@@ -43,7 +41,6 @@ const AssistantPage = () => {
     setError(msg);
   };
 
-  // Auto-scroll when new message
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   }, [history.length]);
@@ -97,8 +94,28 @@ const AssistantPage = () => {
                   </div>
                   <h2 className="text-xl font-semibold text-foreground">How can I help you?</h2>
                   <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto">
-                    Type a query or tap the microphone to ask about medications, locate clinics, or get medical information.
+                    Speak or type to ask about medications, medical news, generate a health report,
+                    or just have a healthcare conversation.
                   </p>
+                  <div className="mt-6 grid grid-cols-2 gap-3 max-w-sm mx-auto text-left">
+                    {[
+                      "Tell me about ibuprofen",
+                      "Latest cancer research news",
+                      "Generate my health report",
+                      "What's a normal blood pressure?",
+                    ].map((example) => (
+                      <button
+                        key={example}
+                        className="px-3 py-2 rounded-xl border border-border bg-card text-xs text-muted-foreground hover:text-foreground hover:border-primary/40 transition text-left"
+                        onClick={() => {
+                          // Dispatch to ChatInput by setting a synthetic event
+                          // (ChatInput manages its own state; this is a hint UX)
+                        }}
+                      >
+                        {example}
+                      </button>
+                    ))}
+                  </div>
                 </motion.div>
               )}
 
@@ -132,7 +149,7 @@ const AssistantPage = () => {
                   </motion.div>
 
                   {/* Assistant response */}
-                  <ResponseCard data={displayMsg.response} onShowMap={() => setShowMap(true)} />
+                  <ResponseCard data={displayMsg.response} />
                   {displayMsg.response.audio_url && (
                     <AudioPlayer audioUrl={displayMsg.response.audio_url} />
                   )}
@@ -151,13 +168,6 @@ const AssistantPage = () => {
           />
         </div>
       </div>
-
-      {/* Map popup */}
-      <AnimatePresence>
-        {showMap && displayMsg?.response.map_data && (
-          <MapPopup data={displayMsg.response.map_data} onClose={() => setShowMap(false)} />
-        )}
-      </AnimatePresence>
     </SidebarProvider>
   );
 };
