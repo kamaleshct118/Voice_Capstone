@@ -49,7 +49,7 @@ def get_medical_info(entities: dict, redis_db1: redis.Redis) -> ToolOutput:
                 "query": query,
             }
 
-        store_chunk(redis_db1, key, info, ttl=settings.db1_ttl_seconds)
+        store_chunk(redis_db1, key, info, ttl=settings.cache_ttl_seconds)
         return ToolOutput(tool_name="medical_info", result=info)
 
     except Exception as e:

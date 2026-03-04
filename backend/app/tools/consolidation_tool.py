@@ -1,5 +1,5 @@
 import redis
-from app.cache.db2_context import get_context
+from app.cache.db0_context import get_context
 from app.mcp.router import ToolOutput
 from app.utils.logger import get_logger
 
@@ -7,13 +7,13 @@ logger = get_logger(__name__)
 
 
 def consolidate_disease_info(
-    entities: dict, redis_db2: redis.Redis, session_id: str
+    entities: dict, redis_db0: redis.Redis, session_id: str
 ) -> ToolOutput:
     """
     Retrieve session conversation history from DB2 and build a structured
     summary for the aggregator to process. LLM formatting happens in aggregator.
     """
-    history = get_context(redis_db2, session_id)
+    history = get_context(redis_db0, session_id)
 
     topics_discussed = []
     for msg in history:

@@ -24,12 +24,17 @@ class ToolOutput(BaseModel):
 async def route_to_tools(
     intent_result: IntentResult,
     redis_db1: redis.Redis,
-    redis_db2: redis.Redis,
+    redis_db0: redis.Redis,
     session_id: str,
     gemini_client=None,
 ) -> List[ToolOutput]:
     """
     Route the classified intent to the appropriate tool.
+
+    Redis DB mapping
+    ─────────────────────────────────────────────────────
+    redis_db1 (DB1) → tool retrieval cache (CAG)
+    redis_db0 (DB0) → conversation history & health logs
 
     Intent → Tool mapping
     ─────────────────────────────────────────────────────
@@ -65,12 +70,12 @@ async def route_to_tools(
         # ── Tool 3: Medical Report Generation ────────────────────
         elif intent == "medical_report":
             from app.tools.report_tool import generate_medical_report
-            return [generate_medical_report(session_id, redis_db2)]
+            return [generate_medical_report(session_id, redis_db0)]
 
         # ── Health Monitoring Q&A ─────────────────────────────────
         elif intent == "health_monitoring":
             from app.tools.health_monitor_tool import get_health_context
-            return [get_health_context(session_id, redis_db2)]
+            return [get_health_context(session_id, redis_db0)]
 
         # ── General Conversation — no external tool needed ────────
         elif intent == "general_conversation":

@@ -3,10 +3,12 @@
 # Exposes the full pipeline endpoints:
 #   POST /api/process          - Main voice+text pipeline (intent → MCP → LLM → TTS)
 #   POST /api/classify-medicine - Dedicated medicine classifier (text/voice/image)
-#   POST /api/health-log       - Log a health reading (Redis DB2 + Excel)
+#   POST /api/health-log       - Log a health reading (Redis DB0 + Excel)
 #   GET  /api/health-summary/{session_id} - AI health trend analysis + daily checklist
 #   POST /api/health-chat      - Conversational chat about logged health data
 #   GET  /api/medical-report/{session_id} - Generate a structured medical report
+# Redis DB0 = conversation history & health logs
+# Redis DB1 = tool retrieval cache (CAG)
 # ──────────────────────────────────────────────────────────────────
 
 import os
@@ -19,8 +21,8 @@ from pydantic import BaseModel
 
 from app.voice import vad, stt, tone_analysis, ssml_builder
 from app.mcp import intent_classifier, router as mcp_router, response_aggregator
-from app.cache import db2_context
-from app.cache.redis_client import redis_db1, redis_db2
+from app.cache import db0_context
+from app.cache.redis_client import redis_db0, redis_db1
 from app.utils.validators import read_and_validate_audio, read_and_validate_image
 from app.utils.metrics import RequestMetrics, record_latency
 from app.utils.logger import get_logger
@@ -143,14 +145,14 @@ async def process_query(request: Request):
     # ── MCP Tool Orchestration ─────────────────────────────────────
     t0 = time.perf_counter()
     tool_outputs = await mcp_router.route_to_tools(
-        intent_result, redis_db1, redis_db2, session_id, gemini_client
+        intent_result, redis_db1, redis_db0, session_id, gemini_client
     )
     metrics.tool_ms = int((time.perf_counter() - t0) * 1000)
     metrics.cache_hit = any(o.error is None and o.result for o in tool_outputs)
 
-    # ── Context update (Redis DB2) ─────────────────────────────────
-    db2_context.append_context(redis_db2, session_id, "user", transcript)
-    context_history = db2_context.get_context(redis_db2, session_id)
+    # ── Context update (Redis DB0 — conversation history) ───────────────────
+    db0_context.append_context(redis_db0, session_id, "user", transcript)
+    context_history = db0_context.get_context(redis_db0, session_id)
 
     # ── LLM Response Generation ────────────────────────────────────
     t0 = time.perf_counter()
@@ -159,7 +161,7 @@ async def process_query(request: Request):
     )
     metrics.llm_ms = int((time.perf_counter() - t0) * 1000)
 
-    db2_context.append_context(redis_db2, session_id, "assistant", text_response)
+    db0_context.append_context(redis_db0, session_id, "assistant", text_response)
 
     # ── SSML Formatting: per-intent tone ──────────────────────────
     # medicine_info → informative | medical_news → neutral
@@ -265,12 +267,12 @@ async def classify_medicine_endpoint(
 @router.post("/health-log")
 async def log_health(entry: HealthLogRequest):
     """
-    Log a health reading to Redis DB2 (conversation cache) and Excel.
+    Log a health reading to Redis DB0 (conversation history) and Excel.
     Supports: blood pressure, blood sugar, weight, mood, symptoms, notes.
     """
     from app.tools.health_monitor_tool import HealthLogEntry, log_health_entry
     health_entry = HealthLogEntry(**entry.model_dump())
-    log_health_entry(health_entry, redis_db2)
+    log_health_entry(health_entry, redis_db0)
     return {"status": "logged", "session_id": entry.session_id}
 
 
@@ -290,7 +292,7 @@ async def get_health_summary(session_id: str, request: Request):
     kokoro_engine = request.app.state.kokoro_engine
 
     from app.tools.health_monitor_tool import analyze_health_trends
-    analysis = analyze_health_trends(session_id, redis_db2, llm_client)
+    analysis = analyze_health_trends(session_id, redis_db0, llm_client)
 
     # TTS summary using informative tone
     summary_text = analysis.get("summary", "No trends detected yet.")
@@ -318,7 +320,7 @@ async def get_medical_report(session_id: str, request: Request):
     from app.tools.report_tool import generate_medical_report
     kokoro_engine = request.app.state.kokoro_engine
 
-    tool_output = generate_medical_report(session_id, redis_db2)
+    tool_output = generate_medical_report(session_id, redis_db0)
     report = tool_output.report_data or tool_output.result
 
     # Build voice summary of the report using structured tone
@@ -362,7 +364,7 @@ async def health_chat(body: HealthChatRequest, request: Request):
     """
     Conversational chat about the user's own health logs.
 
-    Retrieves health history from Redis DB2 and uses it as LLM context.
+    Retrieves health history from Redis DB0 and uses it as LLM context.
     Returns a text insight + TTS audio (informative SSML tone).
     """
     import json
@@ -372,9 +374,9 @@ async def health_chat(body: HealthChatRequest, request: Request):
     llm_client = request.app.state.llm_client
     kokoro_engine = request.app.state.kokoro_engine
 
-    # ── Pull health logs from DB2 ──────────────────────────────────
-    logs = db2_context.get_health_logs(redis_db2, body.session_id, limit=20)
-    chat_history = db2_context.get_context(redis_db2, f"healthchat:{body.session_id}")
+    # ── Pull health logs from DB0 (history) ───────────────────────────
+    logs = db0_context.get_health_logs(redis_db0, body.session_id, limit=20)
+    chat_history = db0_context.get_context(redis_db0, f"healthchat:{body.session_id}")
 
     logs_text = (
         json.dumps(logs, indent=None)[:2000]
@@ -400,10 +402,10 @@ async def health_chat(body: HealthChatRequest, request: Request):
     raw = llm_client.chat(messages, max_tokens=300)
     ai_response = truncate_response(strip_markdown(raw), max_chars=600)
 
-    # ── Persist chat turns to DB2 ──────────────────────────────────
+    # ── Persist chat turns to DB0 (history) ───────────────────────────
     chat_key = f"healthchat:{body.session_id}"
-    db2_context.append_context(redis_db2, chat_key, "user", body.message, max_turns=20)
-    db2_context.append_context(redis_db2, chat_key, "assistant", ai_response, max_turns=20)
+    db0_context.append_context(redis_db0, chat_key, "user", body.message, max_turns=20)
+    db0_context.append_context(redis_db0, chat_key, "assistant", ai_response, max_turns=20)
 
     # ── TTS (informative tone for health conversations) ────────────
     ssml = ssml_builder.build_ssml(ai_response, "informative")

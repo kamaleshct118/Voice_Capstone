@@ -1,5 +1,5 @@
 """
-Tests for Redis cache layer (DB1 CAG + DB2 context/health logs).
+Tests for Redis cache layer (DB1 CAG tool cache + DB0 context/health logs).
 Uses fakeredis for in-memory simulation — no real Redis needed.
 """
 import time
@@ -7,7 +7,7 @@ import pytest
 import fakeredis
 
 from app.cache.db1_cag import build_cache_key, get_cached_chunk, store_chunk
-from app.cache.db2_context import (
+from app.cache.db0_context import (
     get_context, append_context, clear_context,
     append_health_log, get_health_logs, clear_health_logs,
 )
@@ -49,7 +49,7 @@ def test_ttl_expires(redis_client):
     assert get_cached_chunk(redis_client, key) is None
 
 
-# ── DB2 Context Tests ──────────────────────────────────────────────
+# ── DB0 Context Tests ───────────────────────────────────────────────────
 
 def test_append_and_get_context(redis_client):
     session_id = "test-session-001"
@@ -76,7 +76,7 @@ def test_clear_context(redis_client):
     assert get_context(redis_client, session_id) == []
 
 
-# ── DB2 Health Log Tests ───────────────────────────────────────────
+# ── DB0 Health Log Tests ─────────────────────────────────────────────────
 
 def test_append_health_log(redis_client):
     session_id = "health-test-001"

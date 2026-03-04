@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 from app.tools.medicine_classifier_tool import classify_medicine
 from app.tools.health_monitor_tool import threshold_check, log_health_entry, HealthLogEntry
 from app.cache.db1_cag import build_cache_key, store_chunk
-from app.cache.db2_context import get_health_logs
+from app.cache.db0_context import get_health_logs
 
 
 @pytest.fixture
@@ -19,7 +19,7 @@ def db1():
 
 
 @pytest.fixture
-def db2():
+def db0():
     return fakeredis.FakeRedis(decode_responses=True)
 
 
@@ -131,14 +131,14 @@ def test_threshold_check_diabetes_sugar():
     assert any(f["field"] == "sugar_fasting" and f["level"] == "danger" for f in flags)
 
 
-def test_log_health_entry_persists(db2):
+def test_log_health_entry_persists(db0):
     entry = HealthLogEntry(
         session_id="health-persist-test",
         condition="hypertension",
         systolic_bp=138,
         diastolic_bp=88,
     )
-    log_health_entry(entry, db2)
-    logs = get_health_logs(db2, "health-persist-test")
+    log_health_entry(entry, db0)
+    logs = get_health_logs(db0, "health-persist-test")
     assert len(logs) == 1
     assert logs[0]["systolic_bp"] == 138

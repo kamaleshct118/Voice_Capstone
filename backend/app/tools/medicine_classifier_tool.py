@@ -73,7 +73,7 @@ def classify_medicine(
         # ── Cache for voice/text only ──────────────────────────────
         if input_mode != "image" and medicine_name:
             key = build_cache_key("medicine_classifier", medicine_name)
-            store_chunk(redis_db1, key, data, ttl=settings.db1_ttl_seconds)
+            store_chunk(redis_db1, key, data, ttl=settings.cache_ttl_seconds)
 
         logger.info(f"Medicine classified: {data.get('medicine_name')} via {input_mode}")
         return ToolOutput(

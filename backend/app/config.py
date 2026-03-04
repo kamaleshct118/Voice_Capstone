@@ -16,9 +16,11 @@ class Settings(BaseSettings):
     # ── Redis ──────────────────────────────────────────────────────
     redis_host: str = "localhost"
     redis_port: int = 6379
-    redis_db1: int = 1
-    redis_db2: int = 2
-    db1_ttl_seconds: int = 86400
+    redis_db0: int = 0   # DB0 — conversation history & health logs
+    redis_db1: int = 1   # DB1 — tool retrieval cache (CAG)
+    cache_ttl_seconds: int = 86400   # 24h TTL for DB1 cached chunks
+    context_ttl_seconds: int = 604800  # 7-day TTL for DB0 conversation context
+    health_log_ttl_seconds: int = 2592000  # 30-day TTL for DB0 health logs
 
     # ── Whisper ────────────────────────────────────────────────────
     whisper_model_size: str = "base"
