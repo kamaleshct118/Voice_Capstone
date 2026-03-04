@@ -74,10 +74,7 @@ async def route_to_tools(
 
         # ── General Conversation — no external tool needed ────────
         elif intent == "general_conversation":
-            return [ToolOutput(
-                tool_name="general_conversation",
-                result={"context": "general", "transcript": intent_result.raw_transcript},
-            )]
+            return []   # Aggregator uses GENERAL_CONVERSATION_PROMPT directly
 
         else:
             logger.warning(f"[MCP] Unrecognised intent '{intent}', falling back to general_conversation")
