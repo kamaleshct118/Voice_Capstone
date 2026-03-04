@@ -37,7 +37,19 @@ def append_context(
         history = get_context(client, session_id)
         history.append({"role": role, "content": content})
         if len(history) > max_turns:
-            history = history[-max_turns:]
+            from app.llm.client import LLMClient
+            llm = LLMClient(model="llama-3.3-70b-versatile")
+            
+            summary_prompt = "Summarize this conversation history in 3 sentences, preserving key medical context and user preferences"
+            ctx_text = "\n".join(f"{m['role'].capitalize()}: {m['content']}" for m in history)
+            messages = [
+                {"role": "system", "content": summary_prompt},
+                {"role": "user", "content": ctx_text}
+            ]
+            summary = llm.chat(messages, max_tokens=150)
+            
+            history = [{"role": "system", "content": f"Compressed History: {summary}"}]
+
         client.setex(key, settings.context_ttl_seconds, json.dumps(history))
     except Exception as e:
         logger.error(f"append_context error: {e}")

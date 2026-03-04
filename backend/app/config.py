@@ -4,26 +4,28 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     # ── Groq LLM ──────────────────────────────────────────────────
     groq_api_key: str = "placeholder"
-    llm_model: str = "llama-3.1-70b-versatile"
+    llm_model: str = "llama-3.3-70b-versatile"
     llm_temperature: float = 0.3
     llm_max_tokens: int = 512
     llm_timeout: int = 30
 
     # ── Gemini Vision ──────────────────────────────────────────────
     gemini_api_key: str = "placeholder"
-    gemini_model: str = "gemini-1.5-flash"
+    gemini_model: str = "gemini-2.0-flash"
 
     # ── Redis ──────────────────────────────────────────────────────
     redis_host: str = "localhost"
     redis_port: int = 6379
     redis_db0: int = 0   # DB0 — conversation history & health logs
     redis_db1: int = 1   # DB1 — tool retrieval cache (CAG)
-    cache_ttl_seconds: int = 86400   # 24h TTL for DB1 cached chunks
+    ttl_drug: int = 172800     # 48 hours — OpenFDA drug info
+    ttl_news: int = 3600       # 1 hour — NewsAPI articles
+    ttl_medicine: int = 21600  # 6 hours — Gemini medicine classifications
     context_ttl_seconds: int = 604800  # 7-day TTL for DB0 conversation context
     health_log_ttl_seconds: int = 2592000  # 30-day TTL for DB0 health logs
 
     # ── Whisper ────────────────────────────────────────────────────
-    whisper_model_size: str = "base"
+    whisper_model_size: str = "distil-whisper/distil-small.en"
     whisper_device: str = "cpu"
 
     # ── Audio ──────────────────────────────────────────────────────

@@ -29,7 +29,7 @@ def classify_intent(transcript: str, llm_client: LLMClient) -> IntentResult:
         {"role": "user", "content": transcript},
     ]
 
-    raw = llm_client.chat(messages, max_tokens=128)
+    raw = llm_client.chat(messages, max_tokens=128, model="llama-3.1-8b-instant")
     parsed = extract_json_from_response(raw)
 
     if parsed and parsed.get("intent") in VALID_INTENTS:

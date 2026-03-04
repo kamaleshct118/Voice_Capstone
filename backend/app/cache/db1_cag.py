@@ -32,7 +32,7 @@ def store_chunk(
     client: redis.Redis,
     key: str,
     data: dict,
-    ttl: int = settings.cache_ttl_seconds,
+    ttl: int = settings.ttl_drug,
 ) -> None:
     """Store a chunk in Redis DB1 (tool retrieval cache) with TTL."""
     try:

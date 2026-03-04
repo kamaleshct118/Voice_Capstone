@@ -30,10 +30,10 @@ class LLMClient:
         retry=retry_if_exception_type(Exception),
         reraise=True,
     )
-    def chat(self, messages: List[dict], max_tokens: int = settings.llm_max_tokens) -> str:
+    def chat(self, messages: List[dict], max_tokens: int = settings.llm_max_tokens, model: str = None) -> str:
         try:
             response = self.client.chat.completions.create(
-                model=self.model,
+                model=model or self.model,
                 messages=messages,
                 temperature=self.temperature,
                 max_tokens=max_tokens,

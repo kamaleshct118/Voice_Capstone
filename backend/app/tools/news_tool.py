@@ -7,8 +7,6 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-_NEWS_TTL = 3600  # 1 hour — news must stay fresh
-
 
 def get_medical_news(entities: dict, redis_db1: redis.Redis) -> ToolOutput:
     """Fetch latest medical news via NewsAPI with short-TTL caching."""
@@ -21,11 +19,14 @@ def get_medical_news(entities: dict, redis_db1: redis.Redis) -> ToolOutput:
         return ToolOutput(tool_name="medical_news", result=cached)
 
     try:
+        from datetime import datetime, timedelta
+        from_date = (datetime.now() - timedelta(days=180)).strftime('%Y-%m-%d')
         url = "https://newsapi.org/v2/everything"
         params = {
             "q": topic,
             "language": "en",
             "pageSize": 3,
+            "from": from_date,
             "sortBy": "publishedAt",
             "apiKey": settings.news_api_key,
         }
@@ -44,7 +45,7 @@ def get_medical_news(entities: dict, redis_db1: redis.Redis) -> ToolOutput:
             })
 
         result = {"topic": topic, "articles": articles, "source": "NewsAPI"}
-        store_chunk(redis_db1, key, result, ttl=_NEWS_TTL)
+        store_chunk(redis_db1, key, result, ttl=settings.ttl_news)
         return ToolOutput(tool_name="medical_news", result=result)
 
     except Exception as e:
