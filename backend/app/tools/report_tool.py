@@ -79,4 +79,7 @@ def generate_medical_report(session_id: str, redis_db0: redis.Redis) -> ToolOutp
         tool_name="medical_report",
         result=report_data,
         report_data=report_data,
+        success=True,
+        confidence=0.95 if (health_logs or conversation_history) else 0.5,
+        error=None
     )

@@ -43,19 +43,29 @@ def aggregate_response(
     """
     Combine tool outputs + session context into ONE final LLM call.
     Returns a polished, voice-ready plain-text response string.
+    Filters out failed tools and prioritizes successful ones.
     """
     intent = intent_result.intent
 
-    # ── Build tool summary block ───────────────────────────────────
+    # ── Build tool summary block (only successful tools) ──────────
     tool_blocks = []
+    successful_tools = []
+    
     for output in tool_outputs:
-        if output.error:
-            tool_blocks.append(f"[{output.tool_name} ERROR]: {output.error}")
-        elif output.result:
+        # Skip failed tools unless they have a user-friendly message
+        if output.error and not output.result.get("message"):
+            logger.warning(f"Skipping failed tool: {output.tool_name}")
+            continue
+            
+        if output.result:
             import json
+            successful_tools.append(output.tool_name)
             tool_blocks.append(f"[{output.tool_name}]: {json.dumps(output.result, indent=None)[:1500]}")
 
     tool_context = "\n".join(tool_blocks) or "No tool data available."
+    
+    if successful_tools:
+        logger.info(f"Using {len(successful_tools)} successful tools: {successful_tools}")
 
     # ── Last 3 conversation turns for context ─────────────────────
     recent_context = context_history[-3:] if len(context_history) > 3 else context_history
