@@ -105,6 +105,8 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 from app.api.routes import router as process_router
 from app.api.health import router as health_router
+from app.api.redis_explorer import router as redis_router
 
 app.include_router(process_router, prefix="/api", tags=["Clinical Pipeline"])
 app.include_router(health_router, tags=["System Health"])
+app.include_router(redis_router, prefix="/api", tags=["Redis Data Explorer"])

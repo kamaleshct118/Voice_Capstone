@@ -18,11 +18,15 @@ class Settings(BaseSettings):
     redis_port: int = 6379
     redis_db0: int = 0   # DB0 — conversation history & health logs
     redis_db1: int = 1   # DB1 — tool retrieval cache (CAG)
-    ttl_drug: int = 172800     # 48 hours — OpenFDA drug info
-    ttl_news: int = 3600       # 1 hour — NewsAPI articles
-    ttl_medicine: int = 21600  # 6 hours — Gemini medicine classifications
-    context_ttl_seconds: int = 604800  # 7-day TTL for DB0 conversation context
-    health_log_ttl_seconds: int = 2592000  # 30-day TTL for DB0 health logs
+    
+    # DB0 TTL — 30 hours (108000 seconds) for conversation history & health logs
+    context_ttl_seconds: int = 108000  # 30 hours for conversation context
+    health_log_ttl_seconds: int = 108000  # 30 hours for health logs
+    
+    # DB1 TTL — 36 hours (129600 seconds) for tool retrieval cache
+    ttl_drug: int = 129600     # 36 hours — OpenFDA drug info
+    ttl_news: int = 129600     # 36 hours — NewsAPI articles
+    ttl_medicine: int = 129600  # 36 hours — Gemini medicine classifications
 
     # ── Whisper ────────────────────────────────────────────────────
     whisper_model_size: str = "distil-whisper/distil-small.en"

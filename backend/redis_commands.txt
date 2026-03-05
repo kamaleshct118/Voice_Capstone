@@ -1,0 +1,32 @@
+# Redis CLI Commands to Check DB0 Contents
+
+# 1. Connect to Redis and select DB0
+redis-cli
+SELECT 0
+
+# 2. List all keys in DB0
+KEYS *
+
+# 3. For each key, check its type and value
+# Replace "your_key_name" with actual key names from step 2
+
+# Check key type
+TYPE your_key_name
+
+# Get string value
+GET your_key_name
+
+# Get list values
+LRANGE your_key_name 0 -1
+
+# Get hash values
+HGETALL your_key_name
+
+# Check TTL (time to live)
+TTL your_key_name
+
+# Get key info
+INFO keyspace
+
+# Exit Redis CLI
+EXIT

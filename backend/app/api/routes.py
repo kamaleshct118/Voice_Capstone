@@ -435,3 +435,29 @@ async def health_chat(body: HealthChatRequest, request: Request):
         audio_url=audio_url,
         session_id=body.session_id,
     )
+
+
+# ── GET /api/conversation-history/{session_id} ────────────────────
+
+@router.get("/conversation-history/{session_id}")
+async def get_conversation_history(session_id: str):
+    """
+    Retrieve conversation history for a session from Redis DB0.
+    Used by frontend to restore chat history after page refresh.
+    
+    Returns:
+    - messages: list of conversation turns (role, content)
+    - session_id: the session identifier
+    - has_history: boolean indicating if history exists
+    """
+    try:
+        history = db0_context.get_context(redis_db0, session_id)
+        
+        return {
+            "messages": history,
+            "session_id": session_id,
+            "has_history": len(history) > 0,
+        }
+    except Exception as e:
+        logger.error(f"Error retrieving conversation history: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve conversation history")

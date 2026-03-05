@@ -40,7 +40,8 @@ def append_context(
             from app.llm.client import LLMClient
             llm = LLMClient(model="llama-3.3-70b-versatile")
             
-            summary_prompt = "Summarize this conversation history in 3 sentences, preserving key medical context and user preferences"
+            from app.llm.prompts import CONTEXT_COMPRESSION_PROMPT
+            summary_prompt = CONTEXT_COMPRESSION_PROMPT
             ctx_text = "\n".join(f"{m['role'].capitalize()}: {m['content']}" for m in history)
             messages = [
                 {"role": "system", "content": summary_prompt},

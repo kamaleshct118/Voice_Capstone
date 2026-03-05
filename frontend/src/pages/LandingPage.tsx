@@ -74,8 +74,9 @@ const LandingPage = () => {
             </Link>
             <Link
               to="/data"
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
             >
+              <Database className="w-4 h-4" />
               Data Explorer
             </Link>
             <Link
