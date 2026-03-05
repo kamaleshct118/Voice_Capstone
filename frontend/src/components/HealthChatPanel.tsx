@@ -146,9 +146,9 @@ const HealthChatPanel = ({ sessionId, hasLogs }: HealthChatPanelProps) => {
                         >
                             {/* Avatar */}
                             <div
-                                className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${msg.role === "assistant"
-                                        ? "bg-primary/15 text-primary"
-                                        : "bg-muted text-muted-foreground"
+                                className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5 z-10 ${msg.role === "assistant"
+                                    ? "bg-primary/15 text-primary"
+                                    : "bg-muted text-muted-foreground"
                                     }`}
                             >
                                 {msg.role === "assistant" ? (
@@ -158,15 +158,15 @@ const HealthChatPanel = ({ sessionId, hasLogs }: HealthChatPanelProps) => {
                                 )}
                             </div>
 
-                            {/* Bubble */}
-                            <div className={`max-w-[78%] space-y-1.5 ${msg.role === "user" ? "items-end" : "items-start"} flex flex-col`}>
+                            {/* Bubble Context Container */}
+                            <div className={`w-full max-w-[85%] space-y-1.5 ${msg.role === "user" ? "items-end" : "items-start"} flex flex-col`}>
                                 <div
                                     className={`px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${msg.role === "user"
-                                            ? "bg-primary text-primary-foreground rounded-tr-sm"
-                                            : "bg-muted text-foreground rounded-tl-sm"
+                                        ? "bg-primary text-primary-foreground rounded-tr-sm"
+                                        : "bg-muted text-foreground rounded-tl-sm w-full"
                                         }`}
                                 >
-                                    {msg.content}
+                                    <div className="whitespace-pre-wrap">{msg.content}</div>
                                 </div>
 
                                 {/* Audio player for assistant messages */}
@@ -174,8 +174,8 @@ const HealthChatPanel = ({ sessionId, hasLogs }: HealthChatPanelProps) => {
                                     <button
                                         onClick={() => playAudio(msg.audio_url!)}
                                         className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full transition-all border ${playingAudio === msg.audio_url
-                                                ? "bg-primary/20 text-primary border-primary/30 animate-pulse"
-                                                : "border-border text-muted-foreground hover:text-primary hover:border-primary/30"
+                                            ? "bg-primary/20 text-primary border-primary/30 animate-pulse"
+                                            : "border-border text-muted-foreground hover:text-primary hover:border-primary/30"
                                             }`}
                                     >
                                         <Volume2 className="w-3 h-3" />

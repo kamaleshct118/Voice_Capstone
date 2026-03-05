@@ -2,11 +2,12 @@ import React from "react";
 import { motion } from "framer-motion";
 import {
   Stethoscope, Pill, FileText, Activity, Newspaper,
-  MessageCircle, ClipboardList,
+  MessageCircle, ClipboardList, MapPin
 } from "lucide-react";
 import type { ApiResponse } from "@/types/clinical";
 import { TOOL_LABELS } from "@/types/clinical";
 import MedicineClassifierCard from "./MedicineClassifierCard";
+import MapComponent from "./MapComponent";
 
 interface ResponseCardProps {
   data: ApiResponse;
@@ -18,6 +19,7 @@ const toolIcons: Record<string, React.ReactNode> = {
   medical_report: <ClipboardList className="w-4 h-4" />,
   health_monitoring: <Stethoscope className="w-4 h-4" />,
   general_conversation: <MessageCircle className="w-4 h-4" />,
+  nearby_clinic: <MapPin className="w-4 h-4" />
 };
 
 const ResponseCard = ({ data }: ResponseCardProps) => {
@@ -77,7 +79,18 @@ const ResponseCard = ({ data }: ResponseCardProps) => {
           )}
         </div>
       ) : (
-        <p className="text-foreground leading-relaxed">{data.text_response}</p>
+        <div className="space-y-4">
+          <p className="text-foreground leading-relaxed">{data.text_response}</p>
+          {data.map_data && (
+            <div className="mt-4 bg-card border border-border/50 p-4 rounded-xl shadow-sm space-y-3">
+              <div className="flex items-center gap-1.5 text-primary font-medium text-xs mb-1">
+                <MapPin className="w-3.5 h-3.5" />
+                Nearby Facilities near {data.map_data.search_location || "you"}
+              </div>
+              <MapComponent mapData={data.map_data} />
+            </div>
+          )}
+        </div>
       )}
     </motion.div>
   );

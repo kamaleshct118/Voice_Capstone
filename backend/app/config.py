@@ -34,6 +34,8 @@ class Settings(BaseSettings):
 
     medical_api_base_url: str = "https://api.fda.gov/drug"
     news_api_key: str = "placeholder"
+    maps_api_key: str = "placeholder"
+    default_location: str = "Coimbatore" # or whatever the user's city is, fallback
 
     # ── Server ─────────────────────────────────────────────────────
     allowed_origins: str = "http://localhost:5173,http://localhost:3000"

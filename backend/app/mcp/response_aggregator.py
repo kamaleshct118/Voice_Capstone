@@ -83,3 +83,4 @@ def aggregate_response(
     raw = llm_client.chat(messages, max_tokens=300)
     cleaned = strip_markdown(raw)
     return truncate_response(cleaned, max_chars=600)
+

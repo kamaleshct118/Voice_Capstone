@@ -13,6 +13,7 @@ VALID_INTENTS = {
     "medical_report",       # Generate a summary report of the user's stored health data
     "general_conversation", # General health Q&A / chitchat
     "health_monitoring",    # Health-metric-specific queries (BP, sugar, etc.)
+    "nearby_clinic",        # Find nearby clinics/hospitals
 }
 
 

@@ -12,26 +12,30 @@ Given the user's transcribed query, classify it into exactly one of these intent
 - medical_news: Requests for recent medical news, pharmaceutical updates, research alerts
 - medical_report: Requests to generate a health summary, see their report, or review stored health data
 - health_monitoring: Questions about logged health metrics (BP, blood sugar, weight, mood, symptoms)
+- nearby_clinic: Requests to find nearby clinics, hospitals, or medical centers for a condition
 - general_conversation: General health Q&A, greetings, chitchat, or anything not matching above
 
 Return ONLY valid JSON — no explanation, no extra text.
-Format: {"intent": "...", "entities": {"drug": null, "disease": null, "topic": null}}
+Format: {"intent": "...", "entities": {"drug": null, "disease": null, "topic": null, "location": null}}
 
 Examples:
 Query: "Tell me about paracetamol"
-Response: {"intent": "medicine_info", "entities": {"drug": "paracetamol", "disease": null, "topic": null}}
+Response: {"intent": "medicine_info", "entities": {"drug": "paracetamol", "disease": null, "topic": null, "location": null}}
 
 Query: "What are the latest developments in cancer treatment?"
-Response: {"intent": "medical_news", "entities": {"drug": null, "disease": null, "topic": "cancer treatment"}}
+Response: {"intent": "medical_news", "entities": {"drug": null, "disease": null, "topic": "cancer treatment", "location": null}}
 
 Query: "Generate my health report"
-Response: {"intent": "medical_report", "entities": {"drug": null, "disease": null, "topic": null}}
+Response: {"intent": "medical_report", "entities": {"drug": null, "disease": null, "topic": null, "location": null}}
 
 Query: "What was my blood pressure yesterday?"
-Response: {"intent": "health_monitoring", "entities": {"drug": null, "disease": null, "topic": "blood pressure"}}
+Response: {"intent": "health_monitoring", "entities": {"drug": null, "disease": null, "topic": "blood pressure", "location": null}}
+
+Query: "Find a hospital near Chennai for fever"
+Response: {"intent": "nearby_clinic", "entities": {"drug": null, "disease": "fever", "topic": null, "location": "Chennai"}}
 
 Query: "Hello, how are you?"
-Response: {"intent": "general_conversation", "entities": {"drug": null, "disease": null, "topic": null}}
+Response: {"intent": "general_conversation", "entities": {"drug": null, "disease": null, "topic": null, "location": null}}
 """
 
 # ── Response Aggregation ──────────────────────────────────────────

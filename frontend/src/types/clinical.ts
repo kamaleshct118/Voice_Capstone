@@ -8,6 +8,7 @@ export interface ApiResponse {
   tool_type: string;
   medicine_data?: MedicineData;
   report_data?: MedicalReportData;
+  map_data?: any;
   latency_ms?: number;
   session_id?: string;
 }
@@ -93,6 +94,7 @@ export const TOOL_LABELS: Record<string, string> = {
   medical_report: "Medical Report",
   health_monitoring: "Health Monitoring",
   general_conversation: "General Chat",
+  nearby_clinic: "Nearby Facility",
 };
 
 // ── Chat message in session history ──────────────────────────────

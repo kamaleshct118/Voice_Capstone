@@ -15,9 +15,25 @@ const API = "http://localhost:8000/api";
 
 const ChatInput = ({ onResponse, onError, status, onStatusChange, sessionId }: ChatInputProps) => {
   const [text, setText] = useState("");
+  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Get user GPS coordinates silently on mount
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setUserCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        },
+        () => {
+          // Permission denied or unavailable — will fall back to default location in backend
+        },
+        { timeout: 8000, maximumAge: 60000 }
+      );
+    }
+  }, []);
 
   const isRecording = status === "recording";
   const isProcessing = status === "processing";
@@ -31,6 +47,10 @@ const ChatInput = ({ onResponse, onError, status, onStatusChange, sessionId }: C
         const formData = new FormData();
         formData.append("audio", blob, "recording.webm");
         formData.append("session_id", sessionId);
+        if (userCoords) {
+          formData.append("lat", String(userCoords.lat));
+          formData.append("lng", String(userCoords.lng));
+        }
         const res = await fetch(`${API}/process`, { method: "POST", body: formData });
         if (!res.ok) throw new Error(`Server error: ${res.status}`);
         const data: ApiResponse = await res.json();
@@ -41,7 +61,7 @@ const ChatInput = ({ onResponse, onError, status, onStatusChange, sessionId }: C
         onError(err.message || "Failed to process audio");
       }
     },
-    [onResponse, onError, onStatusChange, sessionId]
+    [onResponse, onError, onStatusChange, sessionId, userCoords]
   );
 
   // ── Send text ──────────────────────────────────────────────────
@@ -51,10 +71,15 @@ const ChatInput = ({ onResponse, onError, status, onStatusChange, sessionId }: C
     setText("");
     onStatusChange("processing");
     try {
+      const payload: Record<string, any> = { text: query, session_id: sessionId };
+      if (userCoords) {
+        payload.lat = userCoords.lat;
+        payload.lng = userCoords.lng;
+      }
       const res = await fetch(`${API}/process`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: query, session_id: sessionId }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error(`Server error: ${res.status}`);
       const data: ApiResponse = await res.json();
@@ -64,7 +89,7 @@ const ChatInput = ({ onResponse, onError, status, onStatusChange, sessionId }: C
       onStatusChange("error");
       onError(err.message || "Failed to process text");
     }
-  }, [text, onResponse, onError, onStatusChange, sessionId]);
+  }, [text, onResponse, onError, onStatusChange, sessionId, userCoords]);
 
   // ── Send image (medicine classifier) ──────────────────────────
   const sendImage = useCallback(

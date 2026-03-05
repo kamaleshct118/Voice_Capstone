@@ -18,6 +18,7 @@ class ToolOutput(BaseModel):
     result: dict
     medicine_data: Optional[dict] = None
     report_data: Optional[dict] = None
+    map_data: Optional[dict] = None
     error: Optional[str] = None
 
 
@@ -42,6 +43,7 @@ async def route_to_tools(
     medical_news         → news_tool
     medical_report       → report_tool
     health_monitoring    → health_monitor_tool (context Q&A)
+    nearby_clinic        → nearby_clinic_tool
     general_conversation → (no tool — LLM handles directly)
     """
     intent = intent_result.intent
@@ -76,6 +78,11 @@ async def route_to_tools(
         elif intent == "health_monitoring":
             from app.tools.health_monitor_tool import get_health_context
             return [get_health_context(session_id, redis_db0)]
+
+        # ── Nearby Clinic Search ──────────────────────────────────
+        elif intent == "nearby_clinic":
+            from app.tools.nearby_clinic_tool import find_nearby_clinics
+            return [find_nearby_clinics(entities)]
 
         # ── General Conversation — no external tool needed ────────
         elif intent == "general_conversation":

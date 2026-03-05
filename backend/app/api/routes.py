@@ -40,9 +40,9 @@ class ProcessResponse(BaseModel):
     tool_type: str
     medicine_data: Optional[dict] = None
     report_data: Optional[dict] = None
+    map_data: Optional[dict] = None
     latency_ms: int
     session_id: str
-
 
 class MedicineClassifierResponse(BaseModel):
     medicine_name: str
@@ -97,12 +97,19 @@ async def process_query(request: Request):
     audio_bytes = None
 
     content_type = request.headers.get("content-type", "")
+    user_lat: float | None = None
+    user_lng: float | None = None
 
     # ── Parse input ────────────────────────────────────────────────
     if "multipart/form-data" in content_type:
         form = await request.form()
         audio_file = form.get("audio")
         session_id = form.get("session_id") or session_id
+        _lat = form.get("lat")
+        _lng = form.get("lng")
+        if _lat and _lng:
+            user_lat = float(_lat)
+            user_lng = float(_lng)
 
         if audio_file and hasattr(audio_file, "read"):
             audio_bytes = await read_and_validate_audio(audio_file)
@@ -111,6 +118,8 @@ async def process_query(request: Request):
         body = await request.json()
         transcript = body.get("text", "").strip()
         session_id = body.get("session_id") or session_id
+        user_lat = body.get("lat")
+        user_lng = body.get("lng")
     else:
         raise HTTPException(status_code=400, detail="Unsupported content type")
 
@@ -141,6 +150,12 @@ async def process_query(request: Request):
     t0 = time.perf_counter()
     intent_result = intent_classifier.classify_intent(transcript, llm_client)
     metrics.intent_ms = int((time.perf_counter() - t0) * 1000)
+
+    # ── Inject exact GPS coords into entities for nearby_clinic intent ──
+    if intent_result.intent == "nearby_clinic" and user_lat and user_lng:
+        intent_result.entities["lat"] = user_lat
+        intent_result.entities["lng"] = user_lng
+        logger.info(f"[GPS] Using exact coords: lat={user_lat}, lng={user_lng}")
 
     # ── MCP Tool Orchestration ─────────────────────────────────────
     t0 = time.perf_counter()
@@ -179,7 +194,8 @@ async def process_query(request: Request):
 
     # Extract medicine / report data from tool outputs
     medicine_data = next((o.medicine_data for o in tool_outputs if o.medicine_data), None)
-    report_data = next((o.report_data for o in tool_outputs if o.report_data), None)  # type: ignore[attr-defined]
+    report_data = next((o.report_data for o in tool_outputs if getattr(o, "report_data", None)), None)  # type: ignore[attr-defined]
+    map_data = next((o.map_data for o in tool_outputs if getattr(o, "map_data", None)), None)
 
     return ProcessResponse(
         text_response=text_response,
@@ -187,6 +203,7 @@ async def process_query(request: Request):
         tool_type=intent_result.intent,
         medicine_data=medicine_data,
         report_data=report_data,
+        map_data=map_data,
         latency_ms=metrics.total_ms,
         session_id=session_id,
     )
