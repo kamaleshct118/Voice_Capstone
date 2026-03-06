@@ -13,6 +13,7 @@
 
 import os
 import time
+import asyncio
 from uuid import uuid4
 from typing import Optional
 
@@ -136,7 +137,7 @@ async def process_query(request: Request):
         except (vad.AudioTooLongError, vad.AudioTooShortError) as e:
             raise HTTPException(status_code=400, detail=str(e))
 
-        stt_result = stt.transcribe(audio_array, whisper_model)
+        stt_result = await asyncio.to_thread(stt.transcribe, audio_array, whisper_model)
         transcript = stt_result.transcript
         metrics.stt_ms = int((time.perf_counter() - t0) * 1000)
 
@@ -148,7 +149,7 @@ async def process_query(request: Request):
 
     # ── Intent classification → LLM ───────────────────────────────
     t0 = time.perf_counter()
-    intent_result = intent_classifier.classify_intent(transcript, llm_client)
+    intent_result = await asyncio.to_thread(intent_classifier.classify_intent, transcript, llm_client)
     metrics.intent_ms = int((time.perf_counter() - t0) * 1000)
 
     # ── Inject exact GPS coords into entities for nearby_clinic intent ──
@@ -171,12 +172,13 @@ async def process_query(request: Request):
 
     # ── LLM Response Generation ────────────────────────────────────
     t0 = time.perf_counter()
-    text_response = response_aggregator.aggregate_response(
+    text_response = await asyncio.to_thread(
+        response_aggregator.aggregate_response,
         tool_outputs, intent_result, context_history, llm_client
     )
     metrics.llm_ms = int((time.perf_counter() - t0) * 1000)
 
-    db0_context.append_context(redis_db0, session_id, "assistant", text_response)
+    await asyncio.to_thread(db0_context.append_context, redis_db0, session_id, "assistant", text_response)
 
     # ── SSML Formatting: per-intent tone ──────────────────────────
     # medicine_info → informative | medical_news → neutral
@@ -187,7 +189,7 @@ async def process_query(request: Request):
     ssml = ssml_builder.build_ssml(text_response, ssml_tone)
 
     # ── TTS Synthesis ──────────────────────────────────────────────
-    audio_url = _save_audio_file(kokoro_engine, ssml)
+    audio_url = await asyncio.to_thread(_save_audio_file, kokoro_engine, ssml)
     metrics.tts_ms = int((time.perf_counter() - t0) * 1000)
 
     record_latency(metrics, session_id)
