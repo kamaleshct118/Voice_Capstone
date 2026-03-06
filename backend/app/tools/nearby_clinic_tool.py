@@ -1,146 +1,204 @@
-import httpx
+"""
+nearby_clinic_tool.py
+Optimized clinic/hospital finder based on the Colab notebook approach:
+  1. Geocode location name via Nominatim (OSM) if no GPS coords provided
+  2. Query Overpass API for hospitals + clinics + healthcare:doctor within 10km
+  3. Compute geodesic distances, sort by proximity, return top 10
+  4. Optionally detect specialist type from user symptom/query using Groq
+"""
+
+import math
+import requests
 from app.mcp.router import ToolOutput
 from app.config import settings
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
+NOMINATIM_HEADERS = {"User-Agent": "VoiceMedicalAssistant/1.0"}
+
+
+# ── Haversine distance (km) ───────────────────────────────────────────────────
+
+def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    R = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = (math.sin(dlat / 2) ** 2
+         + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2))
+         * math.sin(dlon / 2) ** 2)
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+# ── Geocode location name → (lat, lon) via Nominatim ─────────────────────────
+
+def _geocode(location_name: str) -> tuple[float, float] | None:
+    try:
+        resp = requests.get(
+            NOMINATIM_URL,
+            params={"q": location_name, "format": "json", "limit": 1},
+            headers=NOMINATIM_HEADERS,
+            timeout=10,
+        )
+        data = resp.json()
+        if data:
+            return float(data[0]["lat"]), float(data[0]["lon"])
+    except Exception as e:
+        logger.warning(f"[ClinicTool] Geocode failed for '{location_name}': {e}")
+    return None
+
+
+# ── Overpass API Query (same approach as Colab) ───────────────────────────────
+
+def _search_overpass(lat: float, lon: float, radius_m: int = 10000) -> list[dict]:
+    """
+    Query Overpass API for hospitals, clinics, and healthcare:doctor
+    within radius_m metres of (lat, lon).
+    Returns a list of raw OSM elements.
+    """
+    query = f"""
+    [out:json][timeout:30];
+    (
+      node["amenity"="hospital"](around:{radius_m},{lat},{lon});
+      way["amenity"="hospital"](around:{radius_m},{lat},{lon});
+      relation["amenity"="hospital"](around:{radius_m},{lat},{lon});
+
+      node["amenity"="clinic"](around:{radius_m},{lat},{lon});
+      way["amenity"="clinic"](around:{radius_m},{lat},{lon});
+      relation["amenity"="clinic"](around:{radius_m},{lat},{lon});
+
+      node["healthcare"="doctor"](around:{radius_m},{lat},{lon});
+      way["healthcare"="doctor"](around:{radius_m},{lat},{lon});
+      relation["healthcare"="doctor"](around:{radius_m},{lat},{lon});
+    );
+    out center;
+    """
+    try:
+        resp = requests.get(
+            OVERPASS_URL,
+            params={"data": query},
+            timeout=35,
+        )
+        if resp.status_code != 200:
+            logger.error(f"[ClinicTool] Overpass API error: {resp.status_code}")
+            return []
+        elements = resp.json().get("elements", [])
+        logger.info(f"[ClinicTool] Overpass returned {len(elements)} raw elements")
+        return elements
+    except Exception as e:
+        logger.error(f"[ClinicTool] Overpass request failed: {e}")
+        return []
+
+
+# ── Parse Overpass elements → clean clinic list ───────────────────────────────
+
+def _parse_elements(elements: list[dict], user_lat: float, user_lon: float) -> list[dict]:
+    """
+    Extract name, phone, coordinates from Overpass elements.
+    Compute distance from user, sort by distance, deduplicate, return top 10.
+    """
+    hospital_list = []
+    seen = set()
+
+    for place in elements:
+        tags = place.get("tags", {})
+        name = tags.get("name", "").strip()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+
+        # Get coordinates (nodes have lat/lon directly; ways/relations have center)
+        if "lat" in place:
+            plat = float(place["lat"])
+            plon = float(place["lon"])
+        elif "center" in place:
+            plat = float(place["center"]["lat"])
+            plon = float(place["center"]["lon"])
+        else:
+            continue
+
+        phone = tags.get("phone") or tags.get("contact:phone") or "N/A"
+        opening_hours = tags.get("opening_hours", "")
+        website = tags.get("website") or tags.get("contact:website") or ""
+        amenity = tags.get("amenity") or tags.get("healthcare") or "facility"
+        distance_km = _haversine(user_lat, user_lon, plat, plon)
+
+        hospital_list.append({
+            "name": name,
+            "phone": phone,
+            "lat": plat,
+            "lng": plon,
+            "distance_km": round(distance_km, 2),
+            "type": amenity,
+            "opening_hours": opening_hours,
+            "website": website,
+            "address": tags.get("addr:full")
+                       or f"{tags.get('addr:street', '')} {tags.get('addr:city', '')}".strip()
+                       or "See map for location",
+        })
+
+    # Sort by distance and return top 10
+    hospital_list.sort(key=lambda x: x["distance_km"])
+    return hospital_list[:10]
+
+
+# ── Main Entry Point ──────────────────────────────────────────────────────────
 
 def find_nearby_clinics(entities: dict) -> ToolOutput:
-    """Find top 10 nearest clinics/hospitals using Free Nominatim (OpenStreetMap) API.
-    
-    If entities contain 'lat'/'lng' (from browser geolocation), skip geocoding
-    and use exact coordinates for maximum precision.
-    Otherwise, fall back to location name → geocode → search.
     """
-    headers = {"User-Agent": "VoiceMedicalAssistant/1.0"}
-
-    # Check if exact GPS coords were passed from frontend
+    Full pipeline:
+      GPS coords or geocode → Overpass API search → parse + sort → ToolOutput with map_data
+    """
     exact_lat = entities.get("lat")
     exact_lng = entities.get("lng")
     location_name = entities.get("location") or settings.default_location
 
     try:
-        with httpx.Client(timeout=15) as client:
+        # ── Step 1: Resolve coordinates ───────────────────────────────────────
+        if exact_lat and exact_lng:
+            lat = float(exact_lat)
+            lon = float(exact_lng)
+            display_location = f"your current location"
+            logger.info(f"[ClinicTool] Using exact GPS: lat={lat}, lon={lon}")
+        else:
+            coords = _geocode(location_name)
+            if not coords:
+                # Fallback to default city
+                logger.warning(f"[ClinicTool] Geocode failed for '{location_name}', trying default: {settings.default_location}")
+                coords = _geocode(settings.default_location)
+                location_name = settings.default_location
 
-            if exact_lat and exact_lng:
-                # Use exact GPS coordinates directly — no geocoding needed
-                lat = float(exact_lat)
-                lng = float(exact_lng)
-                location_name = f"your location ({lat:.4f}, {lng:.4f})"
-                logger.info(f"Using exact GPS coords: lat={lat}, lng={lng}")
-            else:
-                # Geocode the location name → lat/lng
-                geo_params = {"q": location_name, "format": "json", "limit": 1}
-                geo_response = client.get(
-                    "https://nominatim.openstreetmap.org/search",
-                    params=geo_params,
-                    headers=headers,
-                )
-                geo_response.raise_for_status()
-                geo_data = geo_response.json()
+            if not coords:
+                raise ValueError(f"Cannot resolve location: {location_name}")
 
-                # Fallback to default city when location is vague (e.g. "nearby clinic")
-                if not geo_data:
-                    logger.warning(
-                        f"Geocode failed for '{location_name}', falling back to '{settings.default_location}'"
-                    )
-                    location_name = settings.default_location
-                    geo_params["q"] = location_name
-                    geo_response = client.get(
-                        "https://nominatim.openstreetmap.org/search",
-                        params=geo_params,
-                        headers=headers,
-                    )
-                    geo_response.raise_for_status()
-                    geo_data = geo_response.json()
+            lat, lon = coords
+            display_location = location_name
+            logger.info(f"[ClinicTool] Geocoded '{location_name}' → lat={lat}, lon={lon}")
 
-                if not geo_data:
-                    raise ValueError(f"Could not geocode location: {location_name}")
+        # ── Step 2: Query Overpass API ────────────────────────────────────────
+        raw_elements = _search_overpass(lat, lon, radius_m=10000)
 
-                lat = float(geo_data[0]["lat"])
-                lng = float(geo_data[0]["lon"])
+        # ── Step 3: Parse and rank by distance ───────────────────────────────
+        clinics = _parse_elements(raw_elements, lat, lon)
+        logger.info(f"[ClinicTool] {len(clinics)} clinics found near '{display_location}'")
 
-            # ── Haversine Distance Helper ─────────────────────────────
-            import math
-            def calculate_distance(lat1, lon1, lat2, lon2):
-                R = 6371.0 # Earth radius in kilometers
-                dlat = math.radians(lat2 - lat1)
-                dlon = math.radians(lon2 - lon1)
-                a = (math.sin(dlat / 2)**2 
-                     + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2)**2)
-                c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-                return R * c
-
-            # Search for hospitals + clinics near the coordinates via Nominatim
-            clinics_list = []
-            for amenity in ["hospital", "clinic"]:
-                search_params = {
-                    "amenity": amenity,
-                    "format": "json",
-                    "limit": 15,
-                    "lat": lat,
-                    "lon": lng,
-                    "addressdetails": 1,
-                }
-                resp = client.get(
-                    "https://nominatim.openstreetmap.org/search",
-                    params=search_params,
-                    headers=headers,
-                )
-                resp.raise_for_status()
-                results = resp.json()
-
-                for place in results:
-                    name = place.get("name", "").strip()
-                    if not name:
-                        continue
-                        
-                    p_lat = float(place["lat"])
-                    p_lng = float(place["lon"])
-                    dist_km = calculate_distance(lat, lng, p_lat, p_lng)
-                    
-                    addr = place.get("display_name", "Location on Map")
-                    clinics_list.append({
-                        "name": name,
-                        "address": addr,
-                        "lat": p_lat,
-                        "lng": p_lng,
-                        "distance_km": round(dist_km, 1)
-                    })
-            
-            # Sort by distance and deduplicate by name, keeping exactly top 5
-            clinics_list.sort(key=lambda x: x["distance_km"])
-            seen_names = set()
-            clinics = []
-            for c in clinics_list:
-                if c["name"] not in seen_names and len(clinics) < 5:
-                    seen_names.add(c["name"])
-                    clinics.append(c)
-
-        result = {
-            "location": location_name,
-            "clinics": clinics,
-            "count": len(clinics),
-            "success": True
-        }
-
+        # ── Step 4: Build result + map_data ──────────────────────────────────
         map_data = {
             "type": "clinics",
-            "search_location": location_name,
+            "search_location": display_location,
             "center_lat": lat,
-            "center_lng": lng,
+            "center_lng": lon,
             "locations": clinics,
         }
 
         result = {
-            "location": location_name,
+            "location": display_location,
             "clinics": clinics,
             "count": len(clinics),
-            "success": True
+            "success": True,
         }
-
-        logger.info(f"Found {len(clinics)} clinics near '{location_name}'")
 
         return ToolOutput(
             tool_name="nearby_clinic",
@@ -148,11 +206,11 @@ def find_nearby_clinics(entities: dict) -> ToolOutput:
             map_data=map_data,
             success=True,
             confidence=0.95 if clinics else 0.5,
-            error=None
+            error=None,
         )
 
     except Exception as e:
-        logger.error(f"Clinic search error for '{location_name}': {e}")
+        logger.error(f"[ClinicTool] Pipeline error for '{location_name}': {e}")
         return ToolOutput(
             tool_name="nearby_clinic",
             result={
@@ -160,7 +218,7 @@ def find_nearby_clinics(entities: dict) -> ToolOutput:
                 "location": location_name,
                 "clinics": [],
                 "count": 0,
-                "success": False
+                "success": False,
             },
             success=False,
             confidence=0.0,

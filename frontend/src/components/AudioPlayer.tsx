@@ -31,6 +31,18 @@ const AudioPlayer = ({ audioUrl }: AudioPlayerProps) => {
       });
   }, [src]);
 
+  // Global stop listener from the ChatInput Stop button
+  useEffect(() => {
+    const handleGlobalStop = () => {
+      if (audioRef.current && !audioRef.current.paused) {
+        audioRef.current.pause();
+        setIsPlaying(false);
+      }
+    };
+    window.addEventListener("stop-audio-playback", handleGlobalStop);
+    return () => window.removeEventListener("stop-audio-playback", handleGlobalStop);
+  }, []);
+
   const togglePlay = () => {
     if (!audioRef.current) return;
     if (isPlaying) {

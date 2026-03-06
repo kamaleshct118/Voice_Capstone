@@ -1,11 +1,12 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mic, MicOff, Loader2, Send, Camera } from "lucide-react";
+import { Mic, MicOff, Loader2, Send, Camera, MapPin, MapPinOff, Square } from "lucide-react";
 import type { ApiResponse, AppStatus } from "@/types/clinical";
 
 interface ChatInputProps {
   onResponse: (data: ApiResponse, query: string) => void;
   onError: (msg: string) => void;
+  onAbort?: () => void;
   status: AppStatus;
   onStatusChange: (status: AppStatus) => void;
   sessionId: string;
@@ -13,36 +14,91 @@ interface ChatInputProps {
 
 const API = "http://localhost:8000/api";
 
-const ChatInput = ({ onResponse, onError, status, onStatusChange, sessionId }: ChatInputProps) => {
+type GeoStatus = "idle" | "requesting" | "granted" | "denied";
+
+const ChatInput = ({ onResponse, onError, onAbort, status, onStatusChange, sessionId }: ChatInputProps) => {
   const [text, setText] = useState("");
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [geoStatus, setGeoStatus] = useState<GeoStatus>("idle");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const watchIdRef = useRef<number | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Get user GPS coordinates silently on mount
-  useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setUserCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        },
-        () => {
-          // Permission denied or unavailable — will fall back to default location in backend
-        },
-        { timeout: 8000, maximumAge: 60000 }
-      );
+  // ── Stop everything mid-flight ──────────────────────────────────
+  const stopAll = useCallback(() => {
+    // Cancel the in-flight HTTP fetch
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    // Stop recording if active
+    if (mediaRecorderRef.current?.state === "recording") {
+      mediaRecorderRef.current.stop();
     }
+    // Stop any playing TTS audio
+    window.dispatchEvent(new CustomEvent("stop-audio-playback"));
+
+    onStatusChange("idle");
+    onAbort?.();
+  }, [onStatusChange, onAbort]);
+
+  // ── Request geolocation from Chrome ────────────────────────────
+  const requestLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      setGeoStatus("denied");
+      return;
+    }
+    setGeoStatus("requesting");
+
+    // Clear any previous watch
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+    }
+
+    // Use watchPosition so coords stay fresh as user moves
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        setUserCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setGeoStatus("granted");
+      },
+      (err) => {
+        console.warn("Geolocation error:", err.message);
+        setGeoStatus("denied");
+        setUserCoords(null);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+    );
+  }, []);
+
+  // Auto-request on mount
+  useEffect(() => {
+    requestLocation();
+    return () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+    };
+  }, []);
+
+  // Expose stopAll to parent via a stable ref effect
+  useEffect(() => {
+    // Nothing: stopAll is passed via onAbort prop when stop button is needed
   }, []);
 
   const isRecording = status === "recording";
   const isProcessing = status === "processing";
   const disabled = isProcessing;
 
+  const handleStop = useCallback(() => {
+    stopAll();
+  }, [stopAll]);
+
   // ── Send audio ─────────────────────────────────────────────────
   const sendAudio = useCallback(
     async (blob: Blob) => {
       onStatusChange("processing");
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
       try {
         const formData = new FormData();
         formData.append("audio", blob, "recording.webm");
@@ -51,14 +107,17 @@ const ChatInput = ({ onResponse, onError, status, onStatusChange, sessionId }: C
           formData.append("lat", String(userCoords.lat));
           formData.append("lng", String(userCoords.lng));
         }
-        const res = await fetch(`${API}/process`, { method: "POST", body: formData });
+        const res = await fetch(`${API}/process`, { method: "POST", body: formData, signal: controller.signal });
         if (!res.ok) throw new Error(`Server error: ${res.status}`);
         const data: ApiResponse = await res.json();
         onStatusChange("ready");
         onResponse(data, "[Voice message]");
       } catch (err: any) {
+        if (err.name === "AbortError") return; // silently cancel
         onStatusChange("error");
         onError(err.message || "Failed to process audio");
+      } finally {
+        abortControllerRef.current = null;
       }
     },
     [onResponse, onError, onStatusChange, sessionId, userCoords]
@@ -70,6 +129,8 @@ const ChatInput = ({ onResponse, onError, status, onStatusChange, sessionId }: C
     const query = text.trim();
     setText("");
     onStatusChange("processing");
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     try {
       const payload: Record<string, any> = { text: query, session_id: sessionId };
       if (userCoords) {
@@ -80,14 +141,18 @@ const ChatInput = ({ onResponse, onError, status, onStatusChange, sessionId }: C
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
+        signal: controller.signal,
       });
       if (!res.ok) throw new Error(`Server error: ${res.status}`);
       const data: ApiResponse = await res.json();
       onStatusChange("ready");
       onResponse(data, query);
     } catch (err: any) {
+      if (err.name === "AbortError") return; // silently cancel
       onStatusChange("error");
       onError(err.message || "Failed to process text");
+    } finally {
+      abortControllerRef.current = null;
     }
   }, [text, onResponse, onError, onStatusChange, sessionId, userCoords]);
 
@@ -199,13 +264,39 @@ const ChatInput = ({ onResponse, onError, status, onStatusChange, sessionId }: C
         )}
       </AnimatePresence>
 
+      {/* Location status badge */}
+      <div className="flex items-center justify-end mb-2">
+        {geoStatus === "requesting" && (
+          <span className="inline-flex items-center gap-1.5 text-[11px] text-amber-400 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 animate-pulse">
+            <MapPin className="w-3 h-3" />
+            Getting location...
+          </span>
+        )}
+        {geoStatus === "granted" && userCoords && (
+          <span className="inline-flex items-center gap-1.5 text-[11px] text-emerald-400 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+            <MapPin className="w-3 h-3" />
+            Location active
+          </span>
+        )}
+        {geoStatus === "denied" && (
+          <button
+            onClick={requestLocation}
+            className="inline-flex items-center gap-1.5 text-[11px] text-red-400 px-2 py-0.5 rounded-full bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-colors"
+            title="Click to enable location for clinic search"
+          >
+            <MapPinOff className="w-3 h-3" />
+            Enable Location
+          </button>
+        )}
+      </div>
+      {/* Input row: Mic + Camera + Textarea */}
       <div className="flex items-end gap-2">
         {/* Mic button */}
         <button
           onClick={toggleRecording}
           disabled={disabled}
           className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all
-            ${isRecording
+              ${isRecording
               ? "bg-destructive animate-recording-pulse"
               : "bg-muted hover:bg-primary/10 text-muted-foreground hover:text-primary"
             } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
@@ -224,8 +315,8 @@ const ChatInput = ({ onResponse, onError, status, onStatusChange, sessionId }: C
           disabled={disabled}
           title="Upload medicine image"
           className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all
-            bg-muted hover:bg-violet-500/10 text-muted-foreground hover:text-violet-400
-            ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+              bg-muted hover:bg-violet-500/10 text-muted-foreground hover:text-violet-400
+              ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
           aria-label="Upload medicine image"
         >
           <Camera className="w-5 h-5" />
@@ -253,19 +344,26 @@ const ChatInput = ({ onResponse, onError, status, onStatusChange, sessionId }: C
             rows={1}
             className="w-full resize-none rounded-xl border border-border bg-background px-4 py-2.5 pr-12 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
           />
-          {/* Send button */}
-          <button
-            onClick={sendText}
-            disabled={disabled || !text.trim()}
-            className="absolute right-2 bottom-1.5 p-1.5 rounded-lg bg-primary text-primary-foreground disabled:opacity-30 hover:brightness-110 transition"
-            aria-label="Send"
-          >
-            {isProcessing ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
+          {/* Send or Stop button */}
+          {isProcessing ? (
+            <button
+              onClick={handleStop}
+              className="absolute right-2 bottom-1.5 py-1.5 px-3 rounded-lg bg-destructive text-destructive-foreground hover:bg-destructive/90 transition flex items-center gap-1.5"
+              aria-label="Stop processing"
+            >
+              <Square className="w-3.5 h-3.5 fill-current" />
+              <span className="text-xs font-bold leading-none">Stop</span>
+            </button>
+          ) : (
+            <button
+              onClick={sendText}
+              disabled={!text.trim() || isRecording}
+              className="absolute right-2 bottom-1.5 p-1.5 rounded-lg bg-primary text-primary-foreground disabled:opacity-30 hover:brightness-110 transition"
+              aria-label="Send"
+            >
               <Send className="w-4 h-4" />
-            )}
-          </button>
+            </button>
+          )}
         </div>
       </div>
     </div>
