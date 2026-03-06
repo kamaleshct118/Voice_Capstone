@@ -10,8 +10,8 @@ DB_CONFIG = {
     "dbname": "health_monitor_db",
     "user": "health_user",
     "password": "health_password",
-    "host": "localhost",
-    "port": "5432",
+    "host": "127.0.0.1",
+    "port": "5433",
 }
 
 def get_db_connection():
