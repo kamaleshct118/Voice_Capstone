@@ -4,6 +4,9 @@ python-multipart
 pydantic>=2.0
 pydantic-settings
 
+# Database
+psycopg2-binary>=2.9.9
+
 # Redis
 redis>=5.0.0
 
@@ -38,3 +41,4 @@ openpyxl>=3.1.0
 fakeredis>=2.20.0
 pytest>=8.0.0
 pytest-asyncio>=0.23.0
+
