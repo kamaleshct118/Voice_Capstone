@@ -19,26 +19,37 @@ export const useConversationHistory = (sessionId: string) => {
       try {
         setIsLoading(true);
         const res = await fetch(`${API}/conversation-history/${sessionId}`);
-        
+
         if (!res.ok) {
           throw new Error("Failed to fetch conversation history");
         }
 
         const data: ConversationHistoryData = await res.json();
-        
+
         if (data.has_history && data.messages.length > 0) {
           // Convert stored messages to ChatMessage format
           // Messages are stored as alternating user/assistant pairs
           const restoredHistory: ChatMessage[] = [];
-          
-          for (let i = 0; i < data.messages.length; i += 2) {
-            const userMsg = data.messages[i];
-            const assistantMsg = data.messages[i + 1];
-            
-            if (userMsg && assistantMsg && userMsg.role === "user" && assistantMsg.role === "assistant") {
+
+          let i = 0;
+          while (i < data.messages.length) {
+            const msg = data.messages[i];
+
+            if (msg.role === "user") {
+              // Try to find the matching assistant response, which should be the next message
+              let assistantMsg = null;
+              if (i + 1 < data.messages.length && data.messages[i + 1].role === "assistant") {
+                assistantMsg = data.messages[i + 1];
+                i += 2; // Advance past this pair
+              } else {
+                // The assistant response failed or is missing, we create a placeholder or just display the user message
+                assistantMsg = { role: "assistant", content: "Error: No response generated." };
+                i += 1; // Only advance past the user message
+              }
+
               restoredHistory.push({
                 id: crypto.randomUUID(),
-                query: userMsg.content,
+                query: msg.content,
                 response: {
                   text_response: assistantMsg.content,
                   audio_url: "", // Historical messages don't have audio
@@ -48,9 +59,12 @@ export const useConversationHistory = (sessionId: string) => {
                 },
                 timestamp: new Date(),
               });
+            } else {
+              // If we see an assistant message without a preceding user message for some reason, ignore it or handle it.
+              i += 1;
             }
           }
-          
+
           setHistory(restoredHistory);
         }
       } catch (err) {
