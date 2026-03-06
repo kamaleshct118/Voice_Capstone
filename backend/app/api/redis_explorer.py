@@ -201,6 +201,42 @@ def parse_db1_key(key: str, client) -> Optional[Dict[str, Any]]:
 
 # ── API Endpoints ──────────────────────────────────────────────────
 
+@router.get("/postgres/data")
+async def get_postgres_data():
+    """
+    Get all health logs from Postgres database.
+    """
+    def _fetch():
+        from app.db.postgres import get_all_postgres_logs
+        logs = get_all_postgres_logs()
+        return {
+            "db_number": "postgres",
+            "db_name": "Health Monitor (Postgres)",
+            "total_keys": len(logs),
+            "memory_usage": "Persistent Volume",
+            "key_patterns": {"health_logs": len(logs)},
+            "entries": [
+                {
+                    "key": f"Postgres Log {log['id']}",
+                    "tool_name": "health_log_postgres",
+                    "type": "health_log",
+                    "query_info": f"Log from {log['timestamp']}",
+                    "last_active_str": log['timestamp'],
+                    "ttl_seconds": -1,
+                    "preview": [{"role": "system", "content": f"Condition: {log.get('condition')}, BP: {log.get('systolic_bp')}/{log.get('diastolic_bp')}, Note: {log.get('notes')}"}],
+                    "data_preview": log
+                }
+                for log in logs
+            ]
+        }
+        
+    try:
+        return await asyncio.to_thread(_fetch)
+    except Exception as e:
+        logger.error(f"Error fetching Postgres data: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to fetch Postgres data: {str(e)}")
+
+
 @router.get("/redis/db0")
 async def get_db0_data():
     """

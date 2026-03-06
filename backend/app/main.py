@@ -58,6 +58,10 @@ async def lifespan(app: FastAPI):
     logger.info(f"Redis DB0 (history):   {'OK' if db0_ok else 'FAILED'}")
     logger.info(f"Redis DB1 (CAG cache): {'OK' if db1_ok else 'FAILED'}")
 
+    # 7. Initialize Postgres DB
+    from app.db.postgres import init_db
+    init_db()
+
     logger.info("Startup complete. Ready to serve requests.")
     yield
 
