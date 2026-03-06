@@ -40,6 +40,7 @@ class ProcessResponse(BaseModel):
     tool_type: str
     medicine_data: Optional[dict] = None
     report_data: Optional[dict] = None
+    news_data: Optional[dict] = None
     map_data: Optional[dict] = None
     latency_ms: int
     session_id: str
@@ -197,6 +198,13 @@ async def process_query(request: Request):
     medicine_data = next((o.medicine_data for o in tool_outputs if o.medicine_data), None)
     report_data = next((o.report_data for o in tool_outputs if getattr(o, "report_data", None)), None)  # type: ignore[attr-defined]
     map_data = next((o.map_data for o in tool_outputs if getattr(o, "map_data", None)), None)
+    # Extract news_data if the tool returned an articles result
+    news_data = None
+    if intent_result.intent == "medical_news":
+        for o in tool_outputs:
+            if o.result and isinstance(o.result, dict) and "articles" in o.result:
+                news_data = o.result
+                break
 
     return ProcessResponse(
         text_response=text_response,
@@ -204,6 +212,7 @@ async def process_query(request: Request):
         tool_type=intent_result.intent,
         medicine_data=medicine_data,
         report_data=report_data,
+        news_data=news_data,
         map_data=map_data,
         latency_ms=metrics.total_ms,
         session_id=session_id,

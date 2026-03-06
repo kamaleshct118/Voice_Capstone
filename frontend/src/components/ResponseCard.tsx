@@ -8,6 +8,7 @@ import type { ApiResponse } from "@/types/clinical";
 import { TOOL_LABELS } from "@/types/clinical";
 import MedicineClassifierCard from "./MedicineClassifierCard";
 import MapComponent from "./MapComponent";
+import NewsCard from "./NewsCard";
 
 interface ResponseCardProps {
   data: ApiResponse;
@@ -44,6 +45,9 @@ const ResponseCard = ({ data }: ResponseCardProps) => {
       {/* Medicine classifier — special detail card */}
       {data.tool_type === "medicine_info" && data.medicine_data ? (
         <MedicineClassifierCard data={data.medicine_data} />
+      ) : data.tool_type === "medical_news" && data.news_data ? (
+        /* Premium accordion-style news card */
+        <NewsCard data={data.news_data} textResponse={data.text_response} />
       ) : data.tool_type === "medical_report" && data.report_data ? (
         /* Medical Report summary */
         <div className="space-y-3">

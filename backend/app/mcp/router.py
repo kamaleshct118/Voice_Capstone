@@ -66,7 +66,6 @@ async def route_to_tools(
                 gemini_client=gemini_client,
             )]
 
-        # ── Tool 2: Medical & Pharmaceutical News ─────────────────
         elif intent == "medical_news":
             from app.tools.news_tool import get_medical_news
             return [get_medical_news(entities, redis_db1)]

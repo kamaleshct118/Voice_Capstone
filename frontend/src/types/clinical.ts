@@ -8,9 +8,29 @@ export interface ApiResponse {
   tool_type: string;
   medicine_data?: MedicineData;
   report_data?: MedicalReportData;
+  news_data?: NewsData;
   map_data?: any;
   latency_ms?: number;
   session_id?: string;
+}
+
+// ── Medical News Tool output ───────────────────────────────────────
+export interface NewsArticle {
+  title: string;
+  source: string;
+  date: string;
+  url: string;
+  summary: string;
+  valid: boolean;
+}
+
+export interface NewsData {
+  topic: string;
+  articles: NewsArticle[];
+  count: number;
+  source?: string;
+  success: boolean;
+  message?: string;
 }
 
 // ── Medicine Classifier Tool output ───────────────────────────────
