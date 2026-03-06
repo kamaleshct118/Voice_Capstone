@@ -16,6 +16,8 @@ logger = get_logger(__name__)
 class ToolOutput(BaseModel):
     tool_name: str
     result: dict
+    success: bool = True
+    confidence: float = 1.0
     medicine_data: Optional[dict] = None
     report_data: Optional[dict] = None
     map_data: Optional[dict] = None
@@ -97,4 +99,10 @@ async def route_to_tools(
 
     except Exception as e:
         logger.error(f"[MCP] Tool routing error for intent '{intent}': {e}")
-        return [ToolOutput(tool_name=intent, result={}, error=str(e))]
+        return [ToolOutput(
+            tool_name=intent,
+            result={"message": "Tool execution failed"},
+            success=False,
+            confidence=0.0,
+            error=str(e)
+        )]

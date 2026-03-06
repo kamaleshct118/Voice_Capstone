@@ -6,24 +6,14 @@ import {
     CheckSquare, ClipboardList, Activity
 } from "lucide-react";
 import { useHealthMonitor } from "@/hooks/useHealthMonitor";
+import { getOrCreateHealthSession } from "@/utils/session";
 import HealthLogForm from "@/components/HealthLogForm";
 import HealthTrendChart from "@/components/HealthTrendChart";
 import HealthSummaryCard from "@/components/HealthSummaryCard";
 import HealthChatPanel from "@/components/HealthChatPanel";
 
-// Persist session ID in localStorage for continuity across page reloads
-const getOrCreateSessionId = () => {
-    const key = "health_monitor_session_id";
-    let id = localStorage.getItem(key);
-    if (!id) {
-        id = crypto.randomUUID();
-        localStorage.setItem(key, id);
-    }
-    return id;
-};
-
 const HealthMonitorPage = () => {
-    const sessionId = useMemo(getOrCreateSessionId, []);
+    const sessionId = useMemo(getOrCreateHealthSession, []);
     const { logs, analysis, isLogging, isAnalyzing, error, logReading, getAnalysis } =
         useHealthMonitor(sessionId);
 

@@ -58,17 +58,43 @@ def classify_medicine(
 
         data = extract_json_from_response(raw_response)
 
-        if not data:
-            data = {
-                "medicine_name": medicine_name or "Unknown",
-                "chemical_composition": "Unable to extract",
-                "drug_category": "Unknown",
-                "purpose": "Unable to classify",
-                "basic_safety_notes": "Consult a pharmacist.",
-            }
-
-        data["disclaimer"] = _DISCLAIMER
-        data["input_mode"] = input_mode
+        if not data or data.get("medicine_name") == "Unknown" or data.get("chemical_composition") == "Unable to extract":
+            logger.warning(f"Gemini unable to classify '{medicine_name}', falling back to OpenFDA...")
+            from app.tools.medical_api_tool import get_medical_info
+            # We call the OpenFDA tool and pass along its output directly.
+            # Convert OpenFDA output into the Medicine format for the frontend UI if it succeeds.
+            fda_output = get_medical_info({"drug": medicine_name}, redis_db1)
+            
+            if fda_output.success:
+                fda_result = fda_output.result
+                data = {
+                    "medicine_name": medicine_name.capitalize() if medicine_name else "Unknown",
+                    "chemical_composition": "Extracted from OpenFDA label data",
+                    "drug_category": "Varies",
+                    "purpose": fda_result.get("indications", "Unable to classify")[:200],
+                    "mechanism_of_action": fda_result.get("description", "Not provided")[:200],
+                    "common_side_effects": "See warnings section",
+                    "known_contraindications": "None explicitly matched in short query",
+                    "drug_interactions": "Requires full medical consultation",
+                    "basic_safety_notes": fda_result.get("warnings", "Consult a pharmacist.")[:200],
+                    "storage_instructions": "Store as per label",
+                    "prescription_required": "Varies",
+                    "disclaimer": _DISCLAIMER,
+                    "input_mode": input_mode,
+                }
+            else:
+                data = {
+                    "medicine_name": medicine_name.capitalize() if medicine_name else "Unknown",
+                    "chemical_composition": "Unable to extract",
+                    "drug_category": "Unknown",
+                    "purpose": "Classification failed. No FDA data found.",
+                    "basic_safety_notes": "Consult a pharmacist.",
+                    "disclaimer": _DISCLAIMER,
+                    "input_mode": input_mode,
+                }
+        else:
+            data["disclaimer"] = _DISCLAIMER
+            data["input_mode"] = input_mode
 
         # ── Cache for voice/text only ──────────────────────────────
         if input_mode != "image" and medicine_name:
@@ -80,6 +106,9 @@ def classify_medicine(
             tool_name="medicine_info",
             result=data,
             medicine_data=data,
+            success=True,
+            confidence=0.85 if data.get("medicine_name") != "Unknown" else 0.3,
+            error=None
         )
 
     except Exception as e:
@@ -97,5 +126,7 @@ def classify_medicine(
             tool_name="medicine_info",
             result=fallback,
             medicine_data=fallback,
+            success=False,
+            confidence=0.0,
             error=str(e),
         )

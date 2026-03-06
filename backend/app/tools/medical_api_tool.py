@@ -39,6 +39,7 @@ def get_medical_info(entities: dict, redis_db1: redis.Redis) -> ToolOutput:
                 "warnings": (r.get("warnings") or [""])[0][:400],
                 "source": "OpenFDA",
                 "query": query,
+                "success": True
             }
         else:
             info = {
@@ -47,15 +48,28 @@ def get_medical_info(entities: dict, redis_db1: redis.Redis) -> ToolOutput:
                 "warnings": "Always seek professional medical advice.",
                 "source": "OpenFDA",
                 "query": query,
+                "success": False
             }
 
         store_chunk(redis_db1, key, info, ttl=settings.ttl_drug)
-        return ToolOutput(tool_name="medical_info", result=info)
+        return ToolOutput(
+            tool_name="medical_info",
+            result=info,
+            success=bool(results),
+            confidence=0.9 if results else 0.3,
+            error=None
+        )
 
     except Exception as e:
         logger.error(f"Medical API error for '{query}': {e}")
         return ToolOutput(
             tool_name="medical_info",
-            result={"message": f"Unable to retrieve medical data for '{query}'."},
+            result={
+                "message": f"Unable to retrieve medical data for '{query}' at this time.",
+                "query": query,
+                "success": False
+            },
+            success=False,
+            confidence=0.0,
             error=str(e),
         )

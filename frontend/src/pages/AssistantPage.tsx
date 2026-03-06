@@ -7,6 +7,8 @@ import ChatSidebar from "@/components/ChatSidebar";
 import ChatInput from "@/components/ChatInput";
 import ResponseCard from "@/components/ResponseCard";
 import AudioPlayer from "@/components/AudioPlayer";
+import { useConversationHistory } from "@/hooks/useConversationHistory";
+import { getOrCreateAssistantSession } from "@/utils/session";
 import type { ApiResponse, AppStatus, ChatMessage } from "@/types/clinical";
 
 const statusConfig: Record<AppStatus, { label: string; color: string }> = {
@@ -18,10 +20,9 @@ const statusConfig: Record<AppStatus, { label: string; color: string }> = {
 };
 
 const AssistantPage = () => {
-  const sessionId = useMemo(() => crypto.randomUUID(), []);
+  const sessionId = useMemo(getOrCreateAssistantSession, []);
+  const { history, isLoading: isLoadingHistory, addMessage } = useConversationHistory(sessionId);
   const [status, setStatus] = useState<AppStatus>("idle");
-  // All messages — oldest first so the feed renders top → bottom
-  const [history, setHistory] = useState<ChatMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -37,8 +38,7 @@ const AssistantPage = () => {
       response: data,
       timestamp: new Date(),
     };
-    // Append — keeps all previous messages visible
-    setHistory((prev) => [...prev, msg]);
+    addMessage(msg);
     setError(null);
   };
 
@@ -89,8 +89,22 @@ const AssistantPage = () => {
           <div className="flex-1 overflow-y-auto p-4 md:p-6">
             <div className="max-w-2xl mx-auto space-y-6">
 
-              {/* Welcome screen — only when empty */}
-              {history.length === 0 && !error && (
+              {/* Loading history indicator */}
+              {isLoadingHistory && (
+                <motion.div
+                  className="text-center py-20"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                >
+                  <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                    <Activity className="w-8 h-8 text-primary animate-pulse" />
+                  </div>
+                  <p className="text-sm text-muted-foreground">Loading conversation history...</p>
+                </motion.div>
+              )}
+
+              {/* Welcome screen — only when empty and not loading */}
+              {!isLoadingHistory && history.length === 0 && !error && (
                 <motion.div
                   className="text-center py-20"
                   initial={{ opacity: 0 }}
