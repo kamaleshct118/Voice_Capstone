@@ -15,6 +15,7 @@ export interface HealthChatMessage {
 interface HealthChatPanelProps {
     sessionId: string;
     hasLogs: boolean;
+    chronicDisease: string;
 }
 
 const API = "http://localhost:8000/api";
@@ -27,14 +28,14 @@ const SUGGESTED_QUESTIONS = [
     "Are my numbers improving over time?",
 ];
 
-const HealthChatPanel = ({ sessionId, hasLogs }: HealthChatPanelProps) => {
+const HealthChatPanel = ({ sessionId, hasLogs, chronicDisease }: HealthChatPanelProps) => {
     const [messages, setMessages] = useState<HealthChatMessage[]>([
         {
             id: "welcome",
             role: "assistant",
             content: hasLogs
-                ? "Hi! I have access to your logged health readings. Ask me anything about your data — trends, patterns, recommendations, or what your numbers mean."
-                : "Hi! Log some health readings first, then I can analyze your data and answer questions about your trends, BP, sugar levels, weight and more.",
+                ? `Hi! I see your focus is on tracking ${chronicDisease}. Ask me anything about your logged data — trends, patterns, recommendations, or what your numbers mean.`
+                : `Hi! I'm here to support your tracking of ${chronicDisease}. Log some health readings first, then I can analyze your data and answer questions about your trends!`,
             timestamp: new Date(),
         },
     ]);
@@ -66,7 +67,7 @@ const HealthChatPanel = ({ sessionId, hasLogs }: HealthChatPanelProps) => {
             const res = await fetch(`${API}/health-chat`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ session_id: sessionId, message: text.trim() }),
+                body: JSON.stringify({ session_id: sessionId, message: text.trim(), chronic_disease: chronicDisease }),
             });
 
             if (!res.ok) throw new Error(`Server error: ${res.status}`);

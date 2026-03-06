@@ -52,6 +52,7 @@ export interface MedicalReportData {
 export interface HealthLogEntry {
   session_id: string;
   condition: string;
+  chronic_disease?: string;
   systolic_bp?: number;
   diastolic_bp?: number;
   sugar_fasting?: number;

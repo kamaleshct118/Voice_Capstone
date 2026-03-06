@@ -33,6 +33,7 @@ def init_db():
                         session_id VARCHAR(255) NOT NULL,
                         timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                         condition VARCHAR(255),
+                        chronic_disease VARCHAR(255),
                         systolic_bp INT,
                         diastolic_bp INT,
                         sugar_fasting FLOAT,
@@ -42,6 +43,9 @@ def init_db():
                         symptoms TEXT[],
                         notes TEXT
                     );
+                    
+                    -- Add column if it doesn't exist for backward compatibility
+                    ALTER TABLE health_logs ADD COLUMN IF NOT EXISTS chronic_disease VARCHAR(255);
                 """)
             conn.commit()
             logger.info("Postgres health_logs table initialized.")
@@ -63,16 +67,17 @@ def insert_health_log(entry: dict):
         with conn.cursor() as cur:
             cur.execute("""
                 INSERT INTO health_logs (
-                    session_id, timestamp, condition, systolic_bp, diastolic_bp, 
+                    session_id, timestamp, condition, chronic_disease, systolic_bp, diastolic_bp, 
                     sugar_fasting, sugar_postmeal, weight_kg, mood, symptoms, notes
                 ) VALUES (
-                    %(session_id)s, %(timestamp)s, %(condition)s, %(systolic_bp)s, %(diastolic_bp)s,
+                    %(session_id)s, %(timestamp)s, %(condition)s, %(chronic_disease)s, %(systolic_bp)s, %(diastolic_bp)s,
                     %(sugar_fasting)s, %(sugar_postmeal)s, %(weight_kg)s, %(mood)s, %(symptoms)s, %(notes)s
                 )
             """, {
                 'session_id': val_entry.get('session_id'),
                 'timestamp': val_entry.get('timestamp'),
                 'condition': val_entry.get('condition'),
+                'chronic_disease': val_entry.get('chronic_disease'),
                 'systolic_bp': val_entry.get('systolic_bp'),
                 'diastolic_bp': val_entry.get('diastolic_bp'),
                 'sugar_fasting': val_entry.get('sugar_fasting'),

@@ -59,6 +59,7 @@ class MedicineClassifierResponse(BaseModel):
 class HealthLogRequest(BaseModel):
     session_id: str
     condition: str = "other"
+    chronic_disease: Optional[str] = None
     systolic_bp: Optional[int] = None
     diastolic_bp: Optional[int] = None
     sugar_fasting: Optional[float] = None
@@ -320,11 +321,11 @@ async def get_health_summary(session_id: str, request: Request):
     - daily_checklist (personalized tasks for the user)
     - audio_url (TTS using informative SSML tone)
     """
-    llm_client = request.app.state.llm_client
+    health_llm_client = request.app.state.health_llm_client
     kokoro_engine = request.app.state.kokoro_engine
 
     from app.tools.health_monitor_tool import analyze_health_trends
-    analysis = analyze_health_trends(session_id, redis_db0, llm_client)
+    analysis = analyze_health_trends(session_id, redis_db0, health_llm_client)
 
     # TTS summary using informative tone
     summary_text = analysis.get("summary", "No trends detected yet.")
@@ -383,6 +384,7 @@ async def get_medical_report(session_id: str, request: Request):
 class HealthChatRequest(BaseModel):
     session_id: str
     message: str
+    chronic_disease: Optional[str] = None
 
 
 class HealthChatResponse(BaseModel):
@@ -403,7 +405,7 @@ async def health_chat(body: HealthChatRequest, request: Request):
     from app.llm.prompts import HEALTH_CHAT_PROMPT
     from app.llm.formatter import strip_markdown, truncate_response
 
-    llm_client = request.app.state.llm_client
+    health_llm_client = request.app.state.health_llm_client
     kokoro_engine = request.app.state.kokoro_engine
 
     # ── Pull health logs from DB0 (history) ───────────────────────────
@@ -416,11 +418,21 @@ async def health_chat(body: HealthChatRequest, request: Request):
         else "No health readings have been logged yet for this session."
     )
 
+    # Extract chronic disease from the frontend request directly, or fallback to the most recent log
+    chronic_disease = body.chronic_disease or "None specified"
+    if chronic_disease == "None specified" and logs and "chronic_disease" in logs[-1] and logs[-1]["chronic_disease"]:
+        chronic_disease = logs[-1]["chronic_disease"]
+
     messages = [
         {
             "role": "system",
             "content": (
                 f"{HEALTH_CHAT_PROMPT}\n\n"
+                f"=== CRITICAL PATIENT INFO ===\n"
+                f"THE USER HAS ALREADY DECLARED THEIR CHRONIC CONDITION IS: {chronic_disease}\n"
+                f"Always base your advice on {chronic_disease}.\n"
+                f"If they ask what their condition is, you MUST tell them it is {chronic_disease}.\n"
+                f"==========================\n\n"
                 f"USER'S HEALTH LOG DATA:\n{logs_text}"
             ),
         }
@@ -431,8 +443,8 @@ async def health_chat(body: HealthChatRequest, request: Request):
 
     messages.append({"role": "user", "content": body.message})
 
-    raw = llm_client.chat(messages, max_tokens=300)
-    ai_response = truncate_response(strip_markdown(raw), max_chars=600)
+    raw = health_llm_client.chat(messages, max_tokens=1000)
+    ai_response = truncate_response(strip_markdown(raw), max_chars=2500)
 
     # ── Persist chat turns to DB0 (history) ───────────────────────────
     chat_key = f"healthchat:{body.session_id}"

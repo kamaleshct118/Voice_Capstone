@@ -51,6 +51,7 @@ THRESHOLDS = {
 class HealthLogEntry(BaseModel):
     session_id: str
     condition: str = "other"
+    chronic_disease: Optional[str] = None
     systolic_bp: Optional[int] = None
     diastolic_bp: Optional[int] = None
     sugar_fasting: Optional[float] = None
@@ -79,7 +80,7 @@ def export_to_excel(session_id: str, log_entry: dict) -> None:
 
         # Column order
         headers = [
-            "timestamp", "condition",
+            "timestamp", "condition", "chronic_disease",
             "systolic_bp", "diastolic_bp",
             "sugar_fasting", "sugar_postmeal",
             "weight_kg", "mood", "symptoms", "notes",
@@ -97,6 +98,7 @@ def export_to_excel(session_id: str, log_entry: dict) -> None:
         row = [
             log_entry.get("timestamp", datetime.now(timezone.utc).isoformat()),
             log_entry.get("condition", ""),
+            log_entry.get("chronic_disease", ""),
             log_entry.get("systolic_bp", ""),
             log_entry.get("diastolic_bp", ""),
             log_entry.get("sugar_fasting", ""),
@@ -157,11 +159,12 @@ def threshold_check(logs: List[dict]) -> List[dict]:
 def analyze_health_trends(
     session_id: str,
     redis_db0: redis.Redis,
-    llm_client: LLMClient,
+    health_llm_client,
 ) -> dict:
     """
     Pull health logs from DB2, run threshold checks, then make ONE LLM call
     to generate a structured health summary, recommendations, and daily checklist.
+    Uses the dedicated HealthLLMClient.
     """
     logs = get_health_logs(redis_db0, session_id, limit=30)
 
@@ -185,7 +188,13 @@ def analyze_health_trends(
     flagged = threshold_check(logs)
     log_summary = json.dumps(logs, indent=None)[:3000]
 
+    # Extract chronic disease from the most recent log if available
+    chronic_disease = "None specified"
+    if logs and "chronic_disease" in logs[-1] and logs[-1]["chronic_disease"]:
+        chronic_disease = logs[-1]["chronic_disease"]
+
     user_content = (
+        f"Patient Chronic Disease Context: {chronic_disease}\n\n"
         f"Health logs ({len(logs)} entries):\n{log_summary}\n\n"
         f"Pre-flagged readings ({len(flagged)}):\n{json.dumps(flagged)}"
     )
@@ -195,7 +204,7 @@ def analyze_health_trends(
         {"role": "user", "content": user_content},
     ]
 
-    raw = llm_client.chat(messages, max_tokens=600)
+    raw = health_llm_client.chat(messages, max_tokens=600)
     result = extract_json_from_response(raw)
 
     if not result:

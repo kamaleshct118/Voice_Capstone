@@ -44,6 +44,15 @@ async def lifespan(app: FastAPI):
     )
     logger.info(f"LLM client initialized: {settings.llm_model}")
 
+    # 4.1 Initialize Dedicated Health LLM Client
+    from app.llm.health_client import HealthLLMClient
+    app.state.health_llm_client = HealthLLMClient(
+        api_key=settings.health_llm_api_key,
+        base_url=settings.health_llm_base_url,
+        model=settings.health_llm_model
+    )
+    logger.info(f"Health LLM client initialized at: {settings.health_llm_base_url}")
+
     # 5. Initialize Gemini Vision client
     from app.llm.gemini_client import GeminiClient
     app.state.gemini_client = GeminiClient(

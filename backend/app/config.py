@@ -9,6 +9,12 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 512
     llm_timeout: int = 30
 
+    # ── Health Dedicated LLM ───────────────────────────────────────
+    health_llm_api_key: str = "placeholder"
+    health_llm_base_url: str = "https://apidev.navigatelabsai.com/v1"
+    health_llm_model: str = "gpt-4o" # or another string format
+
+
     # ── Gemini Vision ──────────────────────────────────────────────
     gemini_api_key: str = "placeholder"
     gemini_model: str = "gemini-2.0-flash"

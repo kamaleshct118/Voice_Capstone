@@ -8,14 +8,6 @@ interface HealthLogFormProps {
     isLoading: boolean;
 }
 
-const CONDITIONS = [
-    { value: "diabetes", label: "Diabetes" },
-    { value: "hypertension", label: "Hypertension" },
-    { value: "asthma", label: "Asthma" },
-    { value: "pregnancy", label: "Pregnancy" },
-    { value: "other", label: "Other / General" },
-];
-
 const MOODS = ["good", "calm", "stressed", "anxious", "tired"];
 
 const COMMON_SYMPTOMS = [
@@ -24,7 +16,6 @@ const COMMON_SYMPTOMS = [
 ];
 
 const HealthLogForm = ({ onSubmit, isLoading }: HealthLogFormProps) => {
-    const [condition, setCondition] = useState("other");
     const [systolicBp, setSystolicBp] = useState("");
     const [diastolicBp, setDiastolicBp] = useState("");
     const [sugarFasting, setSugarFasting] = useState("");
@@ -42,7 +33,7 @@ const HealthLogForm = ({ onSubmit, isLoading }: HealthLogFormProps) => {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         await onSubmit({
-            condition,
+            condition: "other", // Default fallback if needed by backend model, though it relies on chronic_disease now
             systolic_bp: systolicBp ? parseInt(systolicBp) : undefined,
             diastolic_bp: diastolicBp ? parseInt(diastolicBp) : undefined,
             sugar_fasting: sugarFasting ? parseFloat(sugarFasting) : undefined,
@@ -65,22 +56,6 @@ const HealthLogForm = ({ onSubmit, isLoading }: HealthLogFormProps) => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
         >
-            {/* Condition */}
-            <div>
-                <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
-                    Condition
-                </label>
-                <select
-                    value={condition}
-                    onChange={(e) => setCondition(e.target.value)}
-                    className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                    {CONDITIONS.map((c) => (
-                        <option key={c.value} value={c.value}>{c.label}</option>
-                    ))}
-                </select>
-            </div>
-
             {/* Blood Pressure */}
             <div>
                 <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
@@ -143,8 +118,8 @@ const HealthLogForm = ({ onSubmit, isLoading }: HealthLogFormProps) => {
                             key={m} type="button"
                             onClick={() => setMood(mood === m ? "" : m)}
                             className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${mood === m
-                                    ? "bg-primary text-primary-foreground border-primary"
-                                    : "border-border text-muted-foreground hover:border-primary/50"
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "border-border text-muted-foreground hover:border-primary/50"
                                 }`}
                         >
                             {m.charAt(0).toUpperCase() + m.slice(1)}
@@ -164,8 +139,8 @@ const HealthLogForm = ({ onSubmit, isLoading }: HealthLogFormProps) => {
                             key={s} type="button"
                             onClick={() => toggleSymptom(s)}
                             className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${symptoms.includes(s)
-                                    ? "bg-destructive/20 text-destructive border-destructive/50"
-                                    : "border-border text-muted-foreground hover:border-destructive/30"
+                                ? "bg-destructive/20 text-destructive border-destructive/50"
+                                : "border-border text-muted-foreground hover:border-destructive/30"
                                 }`}
                         >
                             {s}

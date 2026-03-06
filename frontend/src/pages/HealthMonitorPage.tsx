@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -12,12 +12,71 @@ import HealthTrendChart from "@/components/HealthTrendChart";
 import HealthSummaryCard from "@/components/HealthSummaryCard";
 import HealthChatPanel from "@/components/HealthChatPanel";
 
+const CHRONIC_DISEASES = [
+    "Diabetes Type 1", "Diabetes Type 2", "Hypertension",
+    "Asthma", "COPD", "Heart Disease", "Thyroid Disorder",
+    "Arthritis", "Obesity", "None / General Monitoring"
+];
+
 const HealthMonitorPage = () => {
     const sessionId = useMemo(getOrCreateHealthSession, []);
+    const [chronicDisease, setChronicDisease] = useState<string | null>(() => {
+        return localStorage.getItem(`chronic_disease_${sessionId}`);
+    });
+    const [selectedDisease, setSelectedDisease] = useState("");
+
     const { logs, analysis, isLogging, isAnalyzing, error, logReading, getAnalysis } =
         useHealthMonitor(sessionId);
 
     const checklist: string[] = analysis?.daily_checklist ?? [];
+
+    const handleSetDisease = () => {
+        if (!selectedDisease) return;
+        localStorage.setItem(`chronic_disease_${sessionId}`, selectedDisease);
+        setChronicDisease(selectedDisease);
+    };
+
+    if (!chronicDisease) {
+        return (
+            <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="max-w-md w-full rounded-2xl border border-border bg-card p-6 shadow-xl"
+                >
+                    <div className="flex items-center justify-center mb-6">
+                        <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
+                            <HeartPulse className="w-6 h-6 text-primary" />
+                        </div>
+                    </div>
+                    <h2 className="text-2xl font-bold text-center mb-2">Welcome to Health Monitor</h2>
+                    <p className="text-muted-foreground text-center text-sm mb-6">
+                        To personalize your AI analysis and tracking, please select your primary health focus or chronic condition.
+                    </p>
+
+                    <div className="space-y-4">
+                        <select
+                            value={selectedDisease}
+                            onChange={(e) => setSelectedDisease(e.target.value)}
+                            className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary h-[50px]"
+                        >
+                            <option value="" disabled>Select your condition...</option>
+                            {CHRONIC_DISEASES.map(d => (
+                                <option key={d} value={d}>{d}</option>
+                            ))}
+                        </select>
+                        <button
+                            onClick={handleSetDisease}
+                            disabled={!selectedDisease}
+                            className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold disabled:opacity-50 transition-opacity"
+                        >
+                            Continue to Dashboard
+                        </button>
+                    </div>
+                </motion.div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-background">
@@ -78,8 +137,11 @@ const HealthMonitorPage = () => {
                         <h2 className="font-semibold text-foreground mb-4 flex items-center gap-2">
                             <HeartPulse className="w-4 h-4 text-primary" />
                             Log a Reading
+                            <span className="ml-auto text-xs px-2 py-1 bg-primary/10 text-primary rounded-full">
+                                {chronicDisease}
+                            </span>
                         </h2>
-                        <HealthLogForm onSubmit={logReading} isLoading={isLogging} />
+                        <HealthLogForm onSubmit={(entry) => logReading({ ...entry, chronic_disease: chronicDisease })} isLoading={isLogging} />
                     </div>
 
                     {/* Chart */}
@@ -172,7 +234,7 @@ const HealthMonitorPage = () => {
                             — Ask the AI anything about your logged readings
                         </span>
                     </div>
-                    <HealthChatPanel sessionId={sessionId} hasLogs={logs.length > 0} />
+                    <HealthChatPanel sessionId={sessionId} hasLogs={logs.length > 0} chronicDisease={chronicDisease} />
                 </div>
             </div>
         </div>
