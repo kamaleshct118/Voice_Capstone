@@ -48,15 +48,17 @@ THRESHOLDS = {
 
 # ── Data Model ────────────────────────────────────────────────────
 
+from pydantic import BaseModel, Field
+
 class HealthLogEntry(BaseModel):
     session_id: str
     condition: str = "other"
     chronic_disease: Optional[str] = None
-    systolic_bp: Optional[int] = None
-    diastolic_bp: Optional[int] = None
-    sugar_fasting: Optional[float] = None
-    sugar_postmeal: Optional[float] = None
-    weight_kg: Optional[float] = None
+    systolic_bp: Optional[int] = Field(None, ge=70, le=250)
+    diastolic_bp: Optional[int] = Field(None, ge=40, le=150)
+    sugar_fasting: Optional[float] = Field(None, ge=30, le=600)
+    sugar_postmeal: Optional[float] = Field(None, ge=30, le=600)
+    weight_kg: Optional[float] = Field(None, ge=10, le=500)
     mood: Optional[str] = None
     symptoms: Optional[List[str]] = None
     notes: Optional[str] = None
@@ -160,13 +162,14 @@ def analyze_health_trends(
     session_id: str,
     redis_db0: redis.Redis,
     health_llm_client,
+    chronic_disease: str = None
 ) -> dict:
     """
     Pull health logs from DB2, run threshold checks, then make ONE LLM call
     to generate a structured health summary, recommendations, and daily checklist.
     Uses the dedicated HealthLLMClient.
     """
-    logs = get_health_logs(redis_db0, session_id, limit=30)
+    logs = get_health_logs(redis_db0, session_id, limit=30, chronic_disease=chronic_disease)
 
     if not logs:
         return {
@@ -188,13 +191,13 @@ def analyze_health_trends(
     flagged = threshold_check(logs)
     log_summary = json.dumps(logs, indent=None)[:3000]
 
-    # Extract chronic disease from the most recent log if available
-    chronic_disease = "None specified"
-    if logs and "chronic_disease" in logs[-1] and logs[-1]["chronic_disease"]:
-        chronic_disease = logs[-1]["chronic_disease"]
+    analysis_disease = chronic_disease or "None specified"
+    if analysis_disease == "None specified" and logs:
+        if "chronic_disease" in logs[-1] and logs[-1]["chronic_disease"]:
+            analysis_disease = logs[-1]["chronic_disease"]
 
     user_content = (
-        f"Patient Chronic Disease Context: {chronic_disease}\n\n"
+        f"Patient Chronic Disease Context: {analysis_disease}\n\n"
         f"Health logs ({len(logs)} entries):\n{log_summary}\n\n"
         f"Pre-flagged readings ({len(flagged)}):\n{json.dumps(flagged)}"
     )

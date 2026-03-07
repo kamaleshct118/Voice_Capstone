@@ -1,15 +1,17 @@
 # app/tools/report_tool.py
 # ── Tool 3: Medical Report Generation ─────────────────────────────
-# Retrieves stored user health data from Redis DB2 and uses the LLM
-# to produce a structured summary report shown to the user on session start.
+# Retrieves stored user health data from Redis DB0 and uses the Health LLM
+# to produce a structured summary report with personalized clinical tips.
 # ──────────────────────────────────────────────────────────────────
 
 import json
 import redis
 from datetime import datetime, timezone
+from typing import Optional
 from app.cache.db0_context import get_context, get_health_logs
 from app.mcp.router import ToolOutput
 from app.utils.logger import get_logger
+from app.llm.health_client import HealthLLMClient
 
 logger = get_logger(__name__)
 
@@ -19,60 +21,78 @@ _DISCLAIMER = (
     "Always consult a qualified healthcare provider."
 )
 
-
-def generate_medical_report(session_id: str, redis_db0: redis.Redis) -> ToolOutput:
+def generate_medical_report(
+    session_id: str, 
+    redis_db0: redis.Redis, 
+    health_llm: HealthLLMClient,
+    chronic_disease: Optional[str] = None
+) -> ToolOutput:
     """
     Build a structured medical report for the user.
-
-    Gathers:
-    - Conversation history (what topics were discussed)
-    - Health log entries (BP, sugar, weight, mood, notes)
-
-    Returns a ToolOutput whose `report_data` field contains the structured report.
-    The LLM in the response_aggregator then converts this into a voice-friendly summary.
+    Includes:
+    - Detailed daily logs (for graphs and tables)
+    - 6 AI-generated tips based on chronic condition
+    - Session context summary
     """
-    # ── Pull data from Redis DB2 ───────────────────────────────────
+    # 1. Pull data from Redis DB0
     conversation_history = get_context(redis_db0, session_id)
-    health_logs = get_health_logs(redis_db0, session_id, limit=50)
+    # Get last 100 entries to ensure we have enough for a solid report/graph
+    health_logs = get_health_logs(redis_db0, session_id, limit=100)
 
-    # ── Summarise conversation topics ─────────────────────────────
-    user_queries = [
-        msg["content"][:150]
-        for msg in conversation_history
-        if msg.get("role") == "user"
-    ][:15]
-
-    # ── Summarise health metrics ───────────────────────────────────
-    health_summary: dict = {}
-    if health_logs:
+    # 2. Determine chronic disease context
+    disease_context = chronic_disease or "General health monitoring"
+    if not chronic_disease and health_logs:
+        # Fallback to the latest log entry's chronic_disease field if not provided
         latest = health_logs[-1]
-        health_summary = {
-            "total_entries": len(health_logs),
-            "condition": latest.get("condition", "unspecified"),
-            "latest_systolic_bp": latest.get("systolic_bp"),
-            "latest_diastolic_bp": latest.get("diastolic_bp"),
-            "latest_fasting_sugar": latest.get("sugar_fasting"),
-            "latest_postmeal_sugar": latest.get("sugar_postmeal"),
-            "latest_weight_kg": latest.get("weight_kg"),
-            "mood": latest.get("mood"),
-            "symptoms": latest.get("symptoms") or [],
-            "notes": latest.get("notes") or "",
-        }
+        disease_context = latest.get("chronic_disease") or latest.get("condition") or disease_context
 
+    # 3. Generate 6 Points of Tips using Health LLM
+    tips = []
+    try:
+        prompt = (
+            f"You are Dr. Elena, a clinical health assistant. "
+            f"The patient is managing the following condition: {disease_context}. "
+            f"Based on this condition, provide exactly 6 specific, actionable, and compassionate health tips "
+            f"to help the patient manage their condition better daily. "
+            f"Return ONLY a JSON array of 6 strings. No numbers, no headers, no extra text."
+        )
+        raw_tips = health_llm.chat([{"role": "user", "content": prompt}], max_tokens=500)
+        # Attempt to parse JSON array. LLMs sometimes add markdown backticks.
+        clean_json = raw_tips.strip().replace("```json", "").replace("```", "").strip()
+        tips = json.loads(clean_json)
+        if not isinstance(tips, list):
+            tips = [str(tips)]
+    except Exception as e:
+        logger.error(f"Error generating report tips: {e}")
+        tips = [
+            "Maintain a consistent daily schedule for monitoring.",
+            "Keep a detailed record of any unusual symptoms.",
+            "Stay hydrated and prioritize balanced nutrition.",
+            "Ensure you are getting adequate restorative sleep.",
+            "Follow your prescribed treatment plan as directed.",
+            "Schedule regular follow-ups with your healthcare provider."
+        ]
+
+    # Ensure we have exactly 6 tips (trims or pads)
+    tips = tips[:6]
+    while len(tips) < 6:
+        tips.append("Consult your doctor for personalized guidance.")
+
+    # 4. Compile the report data
     report_data = {
         "session_id": session_id,
+        "chronic_disease": disease_context,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "total_interactions": len(conversation_history),
-        "topics_discussed": user_queries,
-        "health_metrics": health_summary,
+        "health_tips": tips,
+        "detailed_logs": health_logs,  # The full list for frontend charts/tables
         "has_health_data": bool(health_logs),
-        "has_conversation_data": bool(conversation_history),
         "disclaimer": _DISCLAIMER,
     }
 
     logger.info(
-        f"[ReportTool] Report generated for session={session_id} | "
-        f"interactions={len(conversation_history)} | health_entries={len(health_logs)}"
+        f"[ReportTool] Comprehensive report generated for session={session_id} | "
+        f"disease={disease_context} | logs={len(health_logs)}"
     )
 
     return ToolOutput(
@@ -80,6 +100,6 @@ def generate_medical_report(session_id: str, redis_db0: redis.Redis) -> ToolOutp
         result=report_data,
         report_data=report_data,
         success=True,
-        confidence=0.95 if (health_logs or conversation_history) else 0.5,
+        confidence=0.98 if health_logs else 0.5,
         error=None
     )

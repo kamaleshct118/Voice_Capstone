@@ -9,15 +9,13 @@
 #   GET  /api/medical-report/{session_id} - Generate a structured medical report
 # Redis DB0 = conversation history & health logs
 # Redis DB1 = tool retrieval cache (CAG)
-# ──────────────────────────────────────────────────────────────────
-
 import os
 import time
 from uuid import uuid4
-from typing import Optional
+from typing import Optional, List
 
 from fastapi import APIRouter, Request, File, Form, UploadFile, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.voice import vad, stt, tone_analysis, ssml_builder
 from app.mcp import intent_classifier, router as mcp_router, response_aggregator
@@ -30,6 +28,52 @@ from app.config import settings
 
 logger = get_logger(__name__)
 router = APIRouter()
+
+
+# ── Health Log Deletion ───────────────────────────────────────────
+
+@router.delete("/health-log/{session_id}/{chronic_disease:path}")
+async def delete_disease_logs(session_id: str, chronic_disease: str):
+    """Delete all health logs for a specific disease from Redis and Postgres."""
+    from app.db.postgres import delete_health_logs_by_disease
+    db0_context.delete_health_logs_by_disease(redis_db0, session_id, chronic_disease)
+    delete_health_logs_by_disease(session_id, chronic_disease)
+    return {"success": True, "message": f"Deleted logs for {chronic_disease}"}
+
+
+# ── Doctor Advice Endpoints ────────────────────────────────────────
+
+class DoctorAdviceRequest(BaseModel):
+    session_id: str
+    chronic_disease: str
+    point: str
+
+@router.post("/doctor-advice")
+async def add_doctor_advice(body: DoctorAdviceRequest):
+    """Store a doctor's advice point for a specific disease."""
+    from app.db.postgres import insert_doctor_advice
+    db0_context.append_doctor_advice(redis_db0, body.session_id, body.chronic_disease, body.point)
+    insert_doctor_advice(body.session_id, body.chronic_disease, body.point)
+    return {"success": True, "message": "Advice point added"}
+
+@router.get("/doctor-advice/{session_id}/{chronic_disease:path}")
+async def get_doctor_advice(session_id: str, chronic_disease: str):
+    """Retrieve all doctor's advice points for a specific disease."""
+    from app.db.postgres import get_doctor_advices_by_disease
+    # Try Redis first
+    points = db0_context.get_doctor_advices(redis_db0, session_id, chronic_disease)
+    if not points:
+        # Fallback to Postgres
+        points = get_doctor_advices_by_disease(session_id, chronic_disease)
+    return points
+
+@router.delete("/doctor-advice/{session_id}/{chronic_disease:path}")
+async def delete_doctor_advice(session_id: str, chronic_disease: str):
+    """Clear all doctor's advice for a specific disease."""
+    from app.db.postgres import delete_doctor_advices_by_disease
+    db0_context.delete_doctor_advices(redis_db0, session_id, chronic_disease)
+    delete_doctor_advices_by_disease(session_id, chronic_disease)
+    return {"success": True, "message": "Advice cleared"}
 
 
 # ── Response Schemas ───────────────────────────────────────────────
@@ -57,15 +101,17 @@ class MedicineClassifierResponse(BaseModel):
     session_id: str
 
 
+from pydantic import BaseModel, Field
+
 class HealthLogRequest(BaseModel):
     session_id: str
     condition: str = "other"
     chronic_disease: Optional[str] = None
-    systolic_bp: Optional[int] = None
-    diastolic_bp: Optional[int] = None
-    sugar_fasting: Optional[float] = None
-    sugar_postmeal: Optional[float] = None
-    weight_kg: Optional[float] = None
+    systolic_bp: Optional[int] = Field(None, ge=70, le=250)
+    diastolic_bp: Optional[int] = Field(None, ge=40, le=150)
+    sugar_fasting: Optional[float] = Field(None, ge=30, le=600)
+    sugar_postmeal: Optional[float] = Field(None, ge=30, le=600)
+    weight_kg: Optional[float] = Field(None, ge=10, le=500)
     mood: Optional[str] = None
     symptoms: Optional[list] = None
     notes: Optional[str] = None
@@ -309,32 +355,29 @@ async def log_health(entry: HealthLogRequest):
     return {"status": "logged", "session_id": entry.session_id}
 
 @router.get("/health-log/{session_id}")
-async def get_health_logs(session_id: str):
+async def get_health_logs(session_id: str, chronic_disease: Optional[str] = None):
     """
-    Fetch all persistent health logs for a session from the Postgres database.
+    Fetch persistent health logs for a session from the Postgres database.
+    Optionally filters by chronic disease context.
     """
     from app.db.postgres import get_health_logs_by_session
-    logs = get_health_logs_by_session(session_id)
+    logs = get_health_logs_by_session(session_id, chronic_disease)
     return logs
 
 
 # ── GET /api/health-summary/{session_id} ──────────────────────────
 
 @router.get("/health-summary/{session_id}")
-async def get_health_summary(session_id: str, request: Request):
+async def get_health_summary(session_id: str, request: Request, chronic_disease: Optional[str] = None):
     """
     Retrieve AI trend analysis + daily checklist for a session's health logs.
-
-    Returns:
-    - summary, flagged_readings, diet_suggestions, lifestyle_recommendations
-    - daily_checklist (personalized tasks for the user)
-    - audio_url (TTS using informative SSML tone)
+    Optionally filters logs by chronic disease context.
     """
     health_llm_client = request.app.state.health_llm_client
     kokoro_engine = request.app.state.kokoro_engine
 
     from app.tools.health_monitor_tool import analyze_health_trends
-    analysis = analyze_health_trends(session_id, redis_db0, health_llm_client)
+    analysis = analyze_health_trends(session_id, redis_db0, health_llm_client, chronic_disease)
 
     # TTS summary using informative tone
     summary_text = analysis.get("summary", "No trends detected yet.")
@@ -349,36 +392,41 @@ async def get_health_summary(session_id: str, request: Request):
 # ── GET /api/medical-report/{session_id} ──────────────────────────
 
 @router.get("/medical-report/{session_id}")
-async def get_medical_report(session_id: str, request: Request):
+async def get_medical_report(session_id: str, request: Request, chronic_disease: Optional[str] = None):
     """
     Generate a structured medical report from stored user data.
 
     Pulls:
-    - Conversation history (topics discussed)
-    - Health log entries (logged metrics)
+    - Detailed logs (for graphs/tables)
+    - 6 Clinical Tips (via Health LLM)
 
-    Returns a structured report dict + TTS audio (structured SSML tone).
+    Returns a structured report dict + TTS audio.
     """
     from app.tools.report_tool import generate_medical_report
     kokoro_engine = request.app.state.kokoro_engine
+    health_llm_client = request.app.state.health_llm_client
 
-    tool_output = generate_medical_report(session_id, redis_db0)
+    tool_output = generate_medical_report(
+        session_id=session_id, 
+        redis_db0=redis_db0, 
+        health_llm=health_llm_client,
+        chronic_disease=chronic_disease
+    )
     report = tool_output.report_data or tool_output.result
 
-    # Build voice summary of the report using structured tone
-    if report.get("has_health_data") or report.get("has_conversation_data"):
-        total = report.get("health_metrics", {}).get("total_entries", 0)
-        topics_count = len(report.get("topics_discussed", []))
+    # Build voice summary
+    if report.get("has_health_data"):
+        logs_count = len(report.get("detailed_logs", []))
+        disease = report.get("chronic_disease", "your condition")
         voice_text = (
-            f"Your health report is ready. "
-            f"You have {total} health log entries and {topics_count} conversation interactions recorded. "
-            f"Please review the details on screen. "
-            f"Remember to consult a qualified healthcare provider for medical decisions."
+            f"I have generated your personalized health report for {disease}. "
+            f"It includes a summary of your {logs_count} logged readings and six clinical tips to help you manage your health. "
+            f"Please review the detailed data and charts on your dashboard."
         )
     else:
         voice_text = (
-            "Your health report is empty. "
-            "Start by logging health readings or asking health questions in the assistant."
+            "Your health report is currently empty. "
+            "Please log some health readings first so I can analyze your trends and provide tips."
         )
 
     ssml = ssml_builder.build_ssml(voice_text, "structured")

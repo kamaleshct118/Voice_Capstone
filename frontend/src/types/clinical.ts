@@ -47,23 +47,12 @@ export interface MedicineData {
 // ── Medical Report Tool output ────────────────────────────────────
 export interface MedicalReportData {
   session_id: string;
+  chronic_disease: string;
   generated_at: string;
   total_interactions: number;
-  topics_discussed: string[];
-  health_metrics: {
-    total_entries?: number;
-    condition?: string;
-    latest_systolic_bp?: number;
-    latest_diastolic_bp?: number;
-    latest_fasting_sugar?: number;
-    latest_postmeal_sugar?: number;
-    latest_weight_kg?: number;
-    mood?: string;
-    symptoms?: string[];
-    notes?: string;
-  };
+  health_tips: string[];
+  detailed_logs: HealthLogEntry[];
   has_health_data: boolean;
-  has_conversation_data: boolean;
   disclaimer: string;
   audio_url?: string;
 }
@@ -81,6 +70,7 @@ export interface HealthLogEntry {
   mood?: string;
   symptoms?: string[];
   notes?: string;
+  timestamp?: string;
 }
 
 // ── Flagged health threshold reading ─────────────────────────────

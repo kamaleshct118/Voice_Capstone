@@ -24,14 +24,47 @@ const HealthLogForm = ({ onSubmit, isLoading }: HealthLogFormProps) => {
     const [mood, setMood] = useState("");
     const [symptoms, setSymptoms] = useState<string[]>([]);
     const [notes, setNotes] = useState("");
+    const [validationError, setValidationError] = useState<string | null>(null);
 
     const toggleSymptom = (s: string) =>
         setSymptoms((prev) =>
             prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]
         );
 
+    const validate = () => {
+        if (systolicBp) {
+            const val = parseInt(systolicBp);
+            if (val < 70 || val > 250) return "Systolic BP must be between 70 and 250 mmHg.";
+        }
+        if (diastolicBp) {
+            const val = parseInt(diastolicBp);
+            if (val < 40 || val > 150) return "Diastolic BP must be between 40 and 150 mmHg.";
+        }
+        if (sugarFasting) {
+            const val = parseFloat(sugarFasting);
+            if (val < 30 || val > 600) return "Fasting Sugar must be between 30 and 600 mg/dL.";
+        }
+        if (sugarPostmeal) {
+            const val = parseFloat(sugarPostmeal);
+            if (val < 30 || val > 600) return "Post-meal Sugar must be between 30 and 600 mg/dL.";
+        }
+        if (weightKg) {
+            const val = parseFloat(weightKg);
+            if (val < 10 || val > 500) return "Weight must be between 10 and 500 kg.";
+        }
+        return null;
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setValidationError(null);
+
+        const error = validate();
+        if (error) {
+            setValidationError(error);
+            return;
+        }
+
         await onSubmit({
             condition: "other", // Default fallback if needed by backend model, though it relies on chronic_disease now
             systolic_bp: systolicBp ? parseInt(systolicBp) : undefined,
@@ -47,6 +80,7 @@ const HealthLogForm = ({ onSubmit, isLoading }: HealthLogFormProps) => {
         setSystolicBp(""); setDiastolicBp("");
         setSugarFasting(""); setSugarPostmeal("");
         setWeightKg(""); setMood(""); setSymptoms([]); setNotes("");
+        setValidationError(null);
     };
 
     return (
@@ -56,6 +90,17 @@ const HealthLogForm = ({ onSubmit, isLoading }: HealthLogFormProps) => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
         >
+            {/* Validation Alert */}
+            {validationError && (
+                <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-xs font-medium flex items-center gap-2"
+                >
+                    <span className="text-sm">⚠️</span>
+                    {validationError}
+                </motion.div>
+            )}
             {/* Blood Pressure */}
             <div>
                 <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
@@ -65,13 +110,13 @@ const HealthLogForm = ({ onSubmit, isLoading }: HealthLogFormProps) => {
                     <input
                         type="number" placeholder="Systolic"
                         value={systolicBp} onChange={(e) => setSystolicBp(e.target.value)}
-                        className="flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        className={`flex-1 rounded-xl border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring ${systolicBp && (parseInt(systolicBp) < 70 || parseInt(systolicBp) > 250) ? "border-destructive ring-destructive/20" : "border-border"}`}
                     />
                     <span className="self-center text-muted-foreground">/</span>
                     <input
                         type="number" placeholder="Diastolic"
                         value={diastolicBp} onChange={(e) => setDiastolicBp(e.target.value)}
-                        className="flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        className={`flex-1 rounded-xl border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring ${diastolicBp && (parseInt(diastolicBp) < 40 || parseInt(diastolicBp) > 150) ? "border-destructive ring-destructive/20" : "border-border"}`}
                     />
                 </div>
             </div>
@@ -85,12 +130,12 @@ const HealthLogForm = ({ onSubmit, isLoading }: HealthLogFormProps) => {
                     <input
                         type="number" placeholder="Fasting"
                         value={sugarFasting} onChange={(e) => setSugarFasting(e.target.value)}
-                        className="flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        className={`flex-1 rounded-xl border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring ${sugarFasting && (parseFloat(sugarFasting) < 30 || parseFloat(sugarFasting) > 600) ? "border-destructive ring-destructive/20" : "border-border"}`}
                     />
                     <input
                         type="number" placeholder="Post-meal"
                         value={sugarPostmeal} onChange={(e) => setSugarPostmeal(e.target.value)}
-                        className="flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        className={`flex-1 rounded-xl border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring ${sugarPostmeal && (parseFloat(sugarPostmeal) < 30 || parseFloat(sugarPostmeal) > 600) ? "border-destructive ring-destructive/20" : "border-border"}`}
                     />
                 </div>
             </div>
@@ -103,7 +148,7 @@ const HealthLogForm = ({ onSubmit, isLoading }: HealthLogFormProps) => {
                 <input
                     type="number" step="0.1" placeholder="e.g. 72.5"
                     value={weightKg} onChange={(e) => setWeightKg(e.target.value)}
-                    className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    className={`w-full rounded-xl border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring ${weightKg && (parseFloat(weightKg) < 10 || parseFloat(weightKg) > 500) ? "border-destructive ring-destructive/20" : "border-border"}`}
                 />
             </div>
 

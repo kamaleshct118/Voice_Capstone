@@ -46,6 +46,14 @@ def init_db():
                     
                     -- Add column if it doesn't exist for backward compatibility
                     ALTER TABLE health_logs ADD COLUMN IF NOT EXISTS chronic_disease VARCHAR(255);
+
+                    CREATE TABLE IF NOT EXISTS doctor_advice (
+                        id SERIAL PRIMARY KEY,
+                        session_id VARCHAR(255) NOT NULL,
+                        chronic_disease VARCHAR(255) NOT NULL,
+                        point TEXT NOT NULL,
+                        timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+                    );
                 """)
             conn.commit()
             logger.info("Postgres health_logs table initialized.")
@@ -93,17 +101,23 @@ def insert_health_log(entry: dict):
     finally:
         conn.close()
 
-def get_health_logs_by_session(session_id: str):
+def get_health_logs_by_session(session_id: str, chronic_disease: str = None):
     conn = get_db_connection()
     if not conn:
         return []
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute("""
-                SELECT * FROM health_logs 
-                WHERE session_id = %s 
-                ORDER BY timestamp ASC
-            """, (session_id,))
+            query = "SELECT * FROM health_logs WHERE session_id = %s"
+            params = [session_id]
+            
+            if chronic_disease:
+                # Filter by chronic_disease OR (is null/General)
+                query += " AND (LOWER(chronic_disease) = LOWER(%s) OR chronic_disease = 'None / General Monitoring' OR chronic_disease IS NULL)"
+                params.append(chronic_disease)
+                
+            query += " ORDER BY timestamp ASC"
+            
+            cur.execute(query, tuple(params))
             rows = cur.fetchall()
             
             # Format timestamp back to ISO
@@ -141,5 +155,90 @@ def get_all_postgres_logs():
     except Exception as e:
         logger.error(f"Error fetching all from Postgres: {e}")
         return []
+    finally:
+        conn.close()
+
+
+def insert_doctor_advice(session_id: str, chronic_disease: str, point: str):
+    conn = get_db_connection()
+    if not conn:
+        return
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO doctor_advice (session_id, chronic_disease, point, timestamp)
+                VALUES (%s, %s, %s, %s)
+            """, (session_id, chronic_disease, point, datetime.now(timezone.utc).isoformat()))
+        conn.commit()
+    except Exception as e:
+        logger.error(f"Error inserting doctor advice into Postgres: {e}")
+    finally:
+        conn.close()
+
+
+def get_doctor_advices_by_disease(session_id: str, chronic_disease: str):
+    conn = get_db_connection()
+    if not conn:
+        return []
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            cur.execute("""
+                SELECT point as content, timestamp FROM doctor_advice 
+                WHERE session_id = %s AND LOWER(chronic_disease) = LOWER(%s)
+                ORDER BY timestamp DESC
+            """, (session_id, chronic_disease))
+            rows = cur.fetchall()
+
+            result = []
+            for r in rows:
+                d = dict(r)
+                if isinstance(d['timestamp'], datetime):
+                    d['timestamp'] = d['timestamp'].isoformat()
+                result.append(d)
+            return result
+    except Exception as e:
+        logger.error(f"Error fetching doctor advice from Postgres: {e}")
+        return []
+    finally:
+        conn.close()
+
+
+def delete_doctor_advices_by_disease(session_id: str, chronic_disease: str):
+    conn = get_db_connection()
+    if not conn:
+        return
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                DELETE FROM doctor_advice 
+                WHERE session_id = %s AND LOWER(chronic_disease) = LOWER(%s)
+            """, (session_id, chronic_disease))
+        conn.commit()
+    except Exception as e:
+        logger.error(f"Error deleting doctor advice from Postgres: {e}")
+    finally:
+        conn.close()
+
+
+def delete_health_logs_by_disease(session_id: str, chronic_disease: str):
+    conn = get_db_connection()
+    if not conn:
+        return
+    try:
+        with conn.cursor() as cur:
+            # If disease is "None / General Monitoring", we might need to handle NULLs or explicit strings
+            if chronic_disease.lower() in ["none / general monitoring", "general", "none"]:
+                cur.execute("""
+                    DELETE FROM health_logs 
+                    WHERE session_id = %s AND (chronic_disease = %s OR chronic_disease IS NULL OR chronic_disease = '')
+                """, (session_id, chronic_disease))
+            else:
+                cur.execute("""
+                    DELETE FROM health_logs 
+                    WHERE session_id = %s AND LOWER(chronic_disease) = LOWER(%s)
+                """, (session_id, chronic_disease))
+        conn.commit()
+    except Exception as e:
+        logger.error(f"Error deleting health logs from Postgres: {e}")
     finally:
         conn.close()
