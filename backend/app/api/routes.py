@@ -286,13 +286,28 @@ async def classify_medicine_endpoint(
 @router.post("/health-log")
 async def log_health(entry: HealthLogRequest):
     """
-    Log a health reading to Redis DB0 (conversation history) and Excel.
+    Log a health reading to Redis DB0 (conversation history), Excel, and Postgres.
     Supports: blood pressure, blood sugar, weight, mood, symptoms, notes.
     """
     from app.tools.health_monitor_tool import HealthLogEntry, log_health_entry
+    from app.db.postgres import insert_health_log
+    
     health_entry = HealthLogEntry(**entry.model_dump())
     log_health_entry(health_entry, redis_db0)
+    
+    # Also save to Postgres for long-term persistence
+    insert_health_log(entry.model_dump())
+    
     return {"status": "logged", "session_id": entry.session_id}
+
+@router.get("/health-log/{session_id}")
+async def get_health_logs(session_id: str):
+    """
+    Fetch all persistent health logs for a session from the Postgres database.
+    """
+    from app.db.postgres import get_health_logs_by_session
+    logs = get_health_logs_by_session(session_id)
+    return logs
 
 
 # ── GET /api/health-summary/{session_id} ──────────────────────────

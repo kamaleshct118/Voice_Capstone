@@ -8,7 +8,7 @@ import ChatInput from "@/components/ChatInput";
 import ResponseCard from "@/components/ResponseCard";
 import AudioPlayer from "@/components/AudioPlayer";
 import { useConversationHistory } from "@/hooks/useConversationHistory";
-import { getOrCreateAssistantSession } from "@/utils/session";
+import { getOrCreateAssistantSession, clearAssistantSession } from "@/utils/session";
 import type { ApiResponse, AppStatus, ChatMessage } from "@/types/clinical";
 
 const statusConfig: Record<AppStatus, { label: string; color: string }> = {
@@ -30,6 +30,18 @@ const AssistantPage = () => {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [history.length]);
+
+  // Clear session when tab/window is closed or refreshed
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      clearAssistantSession();
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, []);
 
   const handleResponse = (data: ApiResponse, query: string) => {
     const msg: ChatMessage = {

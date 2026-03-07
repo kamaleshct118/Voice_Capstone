@@ -61,15 +61,24 @@ def find_nearby_clinics(entities: dict) -> ToolOutput:
                 lat = float(geo_data[0]["lat"])
                 lng = float(geo_data[0]["lon"])
 
-            # Search for top 10 hospitals + clinics near the coordinates via Nominatim
-            clinics = []
+            # ── Haversine Distance Helper ─────────────────────────────
+            import math
+            def calculate_distance(lat1, lon1, lat2, lon2):
+                R = 6371.0 # Earth radius in kilometers
+                dlat = math.radians(lat2 - lat1)
+                dlon = math.radians(lon2 - lon1)
+                a = (math.sin(dlat / 2)**2 
+                     + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2)**2)
+                c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+                return R * c
+
+            # Search for hospitals + clinics near the coordinates via Nominatim
+            clinics_list = []
             for amenity in ["hospital", "clinic"]:
-                if len(clinics) >= 10:
-                    break
                 search_params = {
                     "amenity": amenity,
                     "format": "json",
-                    "limit": 10,
+                    "limit": 15,
                     "lat": lat,
                     "lon": lng,
                     "addressdetails": 1,
@@ -83,18 +92,38 @@ def find_nearby_clinics(entities: dict) -> ToolOutput:
                 results = resp.json()
 
                 for place in results:
-                    if len(clinics) >= 10:
-                        break
                     name = place.get("name", "").strip()
                     if not name:
                         continue
+                        
+                    p_lat = float(place["lat"])
+                    p_lng = float(place["lon"])
+                    dist_km = calculate_distance(lat, lng, p_lat, p_lng)
+                    
                     addr = place.get("display_name", "Location on Map")
-                    clinics.append({
+                    clinics_list.append({
                         "name": name,
                         "address": addr,
-                        "lat": float(place["lat"]),
-                        "lng": float(place["lon"]),
+                        "lat": p_lat,
+                        "lng": p_lng,
+                        "distance_km": round(dist_km, 1)
                     })
+            
+            # Sort by distance and deduplicate by name, keeping exactly top 5
+            clinics_list.sort(key=lambda x: x["distance_km"])
+            seen_names = set()
+            clinics = []
+            for c in clinics_list:
+                if c["name"] not in seen_names and len(clinics) < 5:
+                    seen_names.add(c["name"])
+                    clinics.append(c)
+
+        result = {
+            "location": location_name,
+            "clinics": clinics,
+            "count": len(clinics),
+            "success": True
+        }
 
         map_data = {
             "type": "clinics",
@@ -104,22 +133,36 @@ def find_nearby_clinics(entities: dict) -> ToolOutput:
             "locations": clinics,
         }
 
+        result = {
+            "location": location_name,
+            "clinics": clinics,
+            "count": len(clinics),
+            "success": True
+        }
+
         logger.info(f"Found {len(clinics)} clinics near '{location_name}'")
 
         return ToolOutput(
             tool_name="nearby_clinic",
-            result={
-                "location": location_name,
-                "clinics": clinics,
-                "count": len(clinics),
-            },
+            result=result,
             map_data=map_data,
+            success=True,
+            confidence=0.95 if clinics else 0.5,
+            error=None
         )
 
     except Exception as e:
         logger.error(f"Clinic search error for '{location_name}': {e}")
         return ToolOutput(
             tool_name="nearby_clinic",
-            result={"message": f"Unable to find clinics near '{location_name}'."},
+            result={
+                "message": f"Unable to find clinics near '{location_name}' at this time.",
+                "location": location_name,
+                "clinics": [],
+                "count": 0,
+                "success": False
+            },
+            success=False,
+            confidence=0.0,
             error=str(e),
         )

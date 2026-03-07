@@ -244,6 +244,13 @@ def get_health_context(session_id: str, redis_db0: redis.Redis) -> ToolOutput:
         "flagged_readings": flagged,
         "total_entries": len(logs),
         "context_type": "health_monitoring",
+        "success": True
     }
 
-    return ToolOutput(tool_name="health_monitoring", result=result)
+    return ToolOutput(
+        tool_name="health_monitoring",
+        result=result,
+        success=True,
+        confidence=0.9 if logs else 0.3,
+        error=None
+    )

@@ -6,9 +6,10 @@ import { Database, ArrowLeft, RefreshCw, Activity, Server, ChevronDown, ChevronU
 const DataPage = () => {
   const [db0, setDb0] = useState<any>(null);
   const [db1, setDb1] = useState<any>(null);
+  const [pg, setPg] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"db0" | "db1">("db0");
+  const [activeTab, setActiveTab] = useState<"db0" | "db1" | "pg">("db0");
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   const toggleRow = (key: string) => {
@@ -29,23 +30,26 @@ const DataPage = () => {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
-      const [res0, res1] = await Promise.all([
+      const [res0, res1, resPg] = await Promise.all([
         fetch("http://localhost:8000/api/redis/db0", { signal: controller.signal }),
         fetch("http://localhost:8000/api/redis/db1", { signal: controller.signal }),
+        fetch("http://localhost:8000/api/postgres/data", { signal: controller.signal }),
       ]);
 
       clearTimeout(timeoutId);
 
-      if (!res0.ok || !res1.ok) {
-        const errorText = !res0.ok ? await res0.text() : await res1.text();
+      if (!res0.ok || !res1.ok || !resPg.ok) {
+        const errorText = !res0.ok ? await res0.text() : !res1.ok ? await res1.text() : await resPg.text();
         throw new Error(`API Error: ${errorText}`);
       }
 
       const data0 = await res0.json();
       const data1 = await res1.json();
+      const dataPg = await resPg.json().catch(() => null);
 
       setDb0(data0);
       setDb1(data1);
+      setPg(dataPg);
     } catch (err: any) {
       if (err.name === 'AbortError') {
         setError("Request timed out. Make sure the backend is running.");
@@ -61,7 +65,7 @@ const DataPage = () => {
     fetchData();
   }, []);
 
-  const activeData = activeTab === "db0" ? db0 : db1;
+  const activeData = activeTab === "db0" ? db0 : activeTab === "db1" ? db1 : pg;
 
   return (
     <div className="min-h-screen bg-background">
@@ -113,6 +117,16 @@ const DataPage = () => {
             <Server className="w-4 h-4" />
             Redis DB 1 — Tool Retrieval Cache
           </button>
+          <button
+            onClick={() => setActiveTab("pg")}
+            className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition ${activeTab === "pg"
+              ? "bg-primary text-primary-foreground shadow-sm"
+              : "bg-muted text-muted-foreground hover:bg-muted/80"
+              }`}
+          >
+            <Database className="w-4 h-4" />
+            Persistent Postgres DB
+          </button>
         </div>
 
         {/* Loading */}
@@ -145,7 +159,7 @@ const DataPage = () => {
             </div>
             <div className="p-4 rounded-lg border border-border bg-card">
               <div className="text-sm text-muted-foreground mb-1">TTL</div>
-              <div className="text-2xl font-bold text-foreground">{activeTab === "db0" ? "30h" : "36h"}</div>
+              <div className="text-2xl font-bold text-foreground">{activeTab === "pg" ? "Infinite" : activeTab === "db0" ? "30h" : "36h"}</div>
             </div>
           </div>
         )}

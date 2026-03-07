@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -6,7 +6,7 @@ import {
     CheckSquare, ClipboardList, Activity
 } from "lucide-react";
 import { useHealthMonitor } from "@/hooks/useHealthMonitor";
-import { getOrCreateHealthSession } from "@/utils/session";
+import { getOrCreateHealthSession, clearHealthSession } from "@/utils/session";
 import HealthLogForm from "@/components/HealthLogForm";
 import HealthTrendChart from "@/components/HealthTrendChart";
 import HealthSummaryCard from "@/components/HealthSummaryCard";
@@ -18,6 +18,18 @@ const HealthMonitorPage = () => {
         useHealthMonitor(sessionId);
 
     const checklist: string[] = analysis?.daily_checklist ?? [];
+
+    // Clear session when tab/window is closed or refreshed
+    useEffect(() => {
+        const handleBeforeUnload = () => {
+            clearHealthSession();
+        };
+
+        window.addEventListener("beforeunload", handleBeforeUnload);
+        return () => {
+            window.removeEventListener("beforeunload", handleBeforeUnload);
+        };
+    }, []);
 
     return (
         <div className="min-h-screen bg-background">
