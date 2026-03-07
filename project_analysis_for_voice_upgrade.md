@@ -61,3 +61,121 @@ The Voice Medical Assistant v3.0 is designed as an advanced, highly accessible, 
 - **Location-Aware Spatial Tracking:** Through integration with mapping (Overpass) APIs, users can ask "Where is the nearest hospital?" and receive both a localized map interface on the frontend and a voice-guided summary of the nearest clinics.
 
 Overall, the project is a holistic blend of Generative AI (LLMs and Vision Models), Audio Engineering (STT / TTS / VAD), and Data Engineering (Redis Caching, Postgres persistence)—all orchestrated securely to act as a responsive, real-time medical aide.
+
+## 7) Detailed Flow Architecture
+The system follows a modular pipeline designed for high-concurrency clinical workflows. Below is the technical flow from ingestion to response:
+
+### Architectural Workflow Diagram:
+```mermaid
+graph TD
+    User([User Voice / Image Input]) --> Ingest{Input Type?}
+    
+    %% Input Processing
+    Ingest -- Audio Buffer --> VAD[VAD: Voice Activity Detection]
+    VAD --> STT[STT: Faster-Whisper Transcription]
+    STT --> Dispatch[Text Intent Dispatch]
+    
+    Ingest -- Image Payload --> Vision[Gemini Vision Analysis]
+    Vision --> Dispatch
+    
+    %% Intelligence & Orchestration
+    Dispatch --> Groq[Groq Orchestrator: Llama 3]
+    Groq <--> Memory[(Redis DB0: Context/Memory)]
+    
+    %% Tool Layer
+    Groq --> ToolRouter{Tool Selection}
+    
+    ToolRouter -- Log Vitals --> Health[Health Monitor Tool]
+    ToolRouter -- Map Search --> Clinic[Nearby Clinic Tool]
+    ToolRouter -- Identify Pill --> MedClass[Medicine Classifier]
+    ToolRouter -- Clinical Q&A --> MedAPI[Medical API Tool]
+    ToolRouter -- Session Docs --> Report[Report Tool]
+    
+    %% Persistent Storage
+    Health <--> Postgres[(PostgreSQL: Long-term Logs)]
+    
+    %% Response Pipeline
+    Health & Clinic & MedClass & MedAPI & Report --> Aggregator[Response Aggregator - LLM]
+    Aggregator --> TTS[TTS: Kokoro Audio Engine]
+    
+    %% Final Output
+    TTS --> VoiceOut(Voice Response)
+    Aggregator --> UIWidget(Visual Charts/Maps/Tables)
+    
+    VoiceOut & UIWidget --> Frontend[[React Frontend Display]]
+```
+
+### Flow Breakdown:
+1.  **Multi-Channel Ingestion**: The frontend sends raw audio chunks or Base64 images.
+2.  **Voice Pre-processing**: `vad.py` filters noise and identifies silence before `stt.py` (Faster-Whisper) performs transcription to save compute cycles.
+3.  **Agentic Decisioning**: The Groq-based LLM functions as a "brain," referencing the `Redis DB0` for previous turns to decide which clinical tool is needed.
+4.  **Concurrent Tool Execution**:
+    *   **Postgres Integration**: Securely commits vitals for longitudinal tracking.
+    *   **Overpass API**: Performs spatial queries for local medical infrastructure.
+    *   **Vision-Logic**: Gemini extracts dosage/warnings from medication images.
+5.  **Context-Aware Aggregation**: Instead of returning raw JSON, the LLM reformulates tool data into a compassionate, medically-informed narrative.
+6.  **Dual-Stream Delivery**:
+    *   **Audio**: Synthesized via the Kokoro Engine.
+    *   **Data**: JSON payloads trigger reactive React components (Leaflet maps, Recharts for vitals).
+
+## 8) Logical Line Diagram
+Below is a structured line diagram representing the core data flow of the Voice Medical Assistant:
+
+```text
+[User Input] ──────► [FastAPI Gateway] ────► [Preprocessing] ─────► [Groq Orchestrator]
+(Voice/Image)        (Core Controller)       (VAD/STT/Vision)         (Clinical Brain)
+                                                                              │
+                                                                              ▼
+                                                                    [(Memory: Redis DB0)]
+                                                                              │
+                                                                              ▼
+       ┌────────────────────────┬───────────────────────┬─────────────────────┴───────────────────┐
+       │                        │                       │                                         │
+[Health Monitor]         [Spatial Tool]          [Report System]                          [Medication Tool]
+(PostgreSQL DB)         (Overpass Maps)         (Logical Summary)                         (Gemini Analysis)
+       │                        │                       │                                         │
+       └────────────────────────┴───────────────────────┴─────────────────────┬───────────────────┘
+                                                                              │
+                                                                              ▼
+                                                                    [Response Aggregator]
+                                                                    (Clinical Narrative)
+                                                                              │
+                                                                              ▼
+                                                                    [Output Generation]
+                                                 ┌────────────────────────────┴───────────────────────────┐
+                                                 │                                                        │
+                                        [Kokoro TTS Engine]                                      [React UI Widgets]
+                                         (Dynamic Voice)                                          (Charts/Maps)
+```
+
+## 9) Voice System Specific Architecture
+This specialized flow focuses strictly on how audio is handled between the User and the Assistant:
+
+```text
+[   USER   ]                      [      BACKEND PIPELINE      ]                      [   USER   ]
+      │                                       │                                           ▲
+      │ (1) User Speech (PCM/WAV)             │                                           │ (6) Voice Response
+      ▼                                       │                                           │
+┌───────────────┐           ┌─────────────────┴─────────────────┐                 ┌───────────────┐
+│ Voice Captive │──────────►│ [1. VAD: Silero/Custom Logic]     │                 │ Audio Player  │
+│ Layer (UI)    │           │ (Filters silence/noise)           │                 │ (UI)          │
+└───────────────┘           └─────────────────┬─────────────────┘                 └───────────────┘
+                                              │                                           ▲
+                                              ▼                                           │
+                            ┌─────────────────┴─────────────────┐                 ┌───────┴───────┐
+                            │ [2. ASR: Faster-Whisper (Int8)]   │                 │ [5. TTS:      │
+                            │ (Transcription to text)           │◄────┐           │  Kokoro Engine]│
+                            └─────────────────┬─────────────────┘     │           └───────────────┘
+                                              │                       │                   ▲
+                                              ▼                       │                   │
+                            ┌─────────────────┴─────────────────┐     │           ┌───────┴───────┐
+                            │ [3. LLM: Groq (Llama 3/70B)]      │     │           │ [4. Text      │
+                            │ (Fastest available token stream)  │─────┘           │  Synthesis]   │
+                            └───────────────────────────────────┘ (Tool Results)  └───────────────┘
+```
+
+### Voice Components:
+*   **VAD (Voice Activity Detection)**: Prevents the STT from processing background noise or silence, reducing latency.
+*   **ASR (Automatic Speech Recognition)**: Uses `faster-whisper` for local, high-speed transcription with optimized integer quantization.
+*   **LLM Orchestrator**: Groq serves as the inference engine, providing the low-latency "intelligence" needed for clinical conversation.
+*   **TTS (Text-To-Speech)**: The `Kokoro` engine transforms the assistant's clinical narrative into a natural-sounding audio payload for the user.
