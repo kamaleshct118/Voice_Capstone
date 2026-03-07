@@ -2,7 +2,7 @@ import React from "react";
 import { motion } from "framer-motion";
 import {
   Stethoscope, Pill, FileText, Activity, Newspaper,
-  MessageCircle, ClipboardList, MapPin
+  MessageCircle, ClipboardList, MapPin, Lightbulb, HeartPulse
 } from "lucide-react";
 import type { ApiResponse } from "@/types/clinical";
 import { TOOL_LABELS } from "@/types/clinical";
@@ -49,36 +49,54 @@ const ResponseCard = ({ data }: ResponseCardProps) => {
         /* Premium accordion-style news card */
         <NewsCard data={data.news_data} textResponse={data.text_response} />
       ) : data.tool_type === "medical_report" && data.report_data ? (
-        /* Medical Report summary */
-        <div className="space-y-3">
+        /* Medical Report summary — matches current MedicalReportData shape */
+        <div className="space-y-4">
           <p className="text-foreground leading-relaxed">{data.text_response}</p>
-          <div className="grid grid-cols-2 gap-3 mt-2">
+
+          {/* Stats row */}
+          <div className="grid grid-cols-2 gap-3">
             <div className="p-3 rounded-xl bg-muted/50 text-center">
               <p className="text-2xl font-bold text-primary">
-                {data.report_data.total_interactions}
-              </p>
-              <p className="text-xs text-muted-foreground mt-0.5">Interactions</p>
-            </div>
-            <div className="p-3 rounded-xl bg-muted/50 text-center">
-              <p className="text-2xl font-bold text-emerald-400">
-                {data.report_data.health_metrics?.total_entries ?? 0}
+                {data.report_data.detailed_logs?.length ?? 0}
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">Health Logs</p>
             </div>
-          </div>
-          {data.report_data.topics_discussed.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
-                Topics Discussed
+            <div className="p-3 rounded-xl bg-muted/50 text-center">
+              <p className="text-2xl font-bold text-emerald-400">
+                {data.report_data.health_tips?.length ?? 0}
               </p>
-              <ul className="text-sm text-foreground space-y-1">
-                {data.report_data.topics_discussed.slice(0, 5).map((t, i) => (
+              <p className="text-xs text-muted-foreground mt-0.5">AI Tips</p>
+            </div>
+          </div>
+
+          {/* Condition badge */}
+          {data.report_data.chronic_disease && (
+            <div className="flex items-center gap-2 text-xs">
+              <HeartPulse className="w-3.5 h-3.5 text-primary shrink-0" />
+              <span className="text-muted-foreground">Condition tracked:</span>
+              <span className="font-semibold text-foreground">{data.report_data.chronic_disease}</span>
+            </div>
+          )}
+
+          {/* Health tips preview */}
+          {data.report_data.health_tips && data.report_data.health_tips.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                <Lightbulb className="w-3.5 h-3.5 text-amber-400" /> AI Clinical Tips
+              </p>
+              <ul className="text-sm text-foreground space-y-1.5">
+                {data.report_data.health_tips.slice(0, 3).map((tip, i) => (
                   <li key={i} className="flex gap-2">
-                    <span className="text-primary">•</span>
-                    <span className="line-clamp-1">{t}</span>
+                    <span className="text-primary shrink-0">{i + 1}.</span>
+                    <span className="line-clamp-2">{tip}</span>
                   </li>
                 ))}
               </ul>
+              {data.report_data.health_tips.length > 3 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  +{data.report_data.health_tips.length - 3} more tips in full report…
+                </p>
+              )}
             </div>
           )}
         </div>

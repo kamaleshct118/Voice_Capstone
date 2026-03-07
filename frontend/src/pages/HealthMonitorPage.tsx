@@ -35,7 +35,7 @@ const HealthMonitorPage = () => {
     const [isSavingAdvice, setIsSavingAdvice] = useState(false);
 
     const {
-        logs, analysis, isLogging, isAnalyzing, error,
+        logs, analysis, isLogging, isAnalyzing, error, clearError,
         logReading, getAnalysis, getReport, deleteLogsByDisease,
         addDoctorAdvice, getDoctorAdvice
     } = useHealthMonitor(sessionId, chronicDisease);
@@ -51,6 +51,13 @@ const HealthMonitorPage = () => {
             fetchAdvice(chronicDisease);
         }
     }, [chronicDisease, sessionId]);
+
+    // Auto-dismiss errors after 4 seconds
+    useEffect(() => {
+        if (!error) return;
+        const t = setTimeout(() => clearError(), 4000);
+        return () => clearTimeout(t);
+    }, [error, clearError]);
 
     const handleSetDisease = (disease: string) => {
         if (!disease) return;
@@ -242,16 +249,22 @@ const HealthMonitorPage = () => {
                     </span>
                 </motion.div>
 
-                {/* Error */}
+                {/* Error - auto-dismisses after 4s */}
                 <AnimatePresence>
                     {error && (
                         <motion.div
-                            className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
+                            className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm flex items-center justify-between gap-3"
+                            initial={{ opacity: 0, y: -6 }}
+                            animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0 }}
                         >
-                            {error}
+                            <span>{error}</span>
+                            <button
+                                onClick={clearError}
+                                className="shrink-0 text-xs font-bold opacity-70 hover:opacity-100"
+                            >
+                                ✕
+                            </button>
                         </motion.div>
                     )}
                 </AnimatePresence>

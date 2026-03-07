@@ -129,12 +129,15 @@ export const useHealthMonitor = (sessionId: string, currentDisease?: string | nu
         }
     }, [sessionId]);
 
+    const clearError = useCallback(() => setError(null), []);
+
     return {
         logs,
         analysis,
         isLogging,
         isAnalyzing,
         error,
+        clearError,
         logReading,
         getAnalysis,
         getReport,
