@@ -34,6 +34,8 @@ _PITCH_MAP = {
 
 def sanitize_for_ssml(text: str) -> str:
     """Escape XML special characters for safe SSML embedding."""
+    # Remove bullet point dashes so the TTS doesn't verbally say "dash"
+    text = re.sub(r'^\s*-\s+', '', text, flags=re.MULTILINE)
     return html.escape(text, quote=False)
 
 
@@ -51,8 +53,8 @@ def build_ssml(text: str, tone: str = "neutral") -> str:
     rate = _RATE_MAP.get(tone, "medium")
     pitch = _PITCH_MAP.get(tone, "+0st")
 
-    # Split on sentence boundaries and add breath pauses
-    sentences = re.split(r"(?<=[.!?])\s+", safe_text)
+    # Split on sentence boundaries OR newlines for proper list/header pauses
+    sentences = re.split(r"(?<=[.!?])\s+|\n+", safe_text)
     sentences = [s.strip() for s in sentences if s.strip()]
 
     # Use a longer break for structured/alert tones
