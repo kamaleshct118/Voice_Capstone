@@ -90,7 +90,7 @@ def _fetch_articles(parsed_query: dict, page_size: int = 20) -> List[dict]:
     """Fetch articles from NewsAPI using expanded search keywords."""
     keywords = parsed_query.get("search_keywords") or parsed_query.get("main_topic") or "medical research"
     keywords = _expand_query(keywords)
-    from_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+    from_date = (datetime.now() - timedelta(days=25)).strftime("%Y-%m-%d")
 
     params = {
         "q": keywords,
