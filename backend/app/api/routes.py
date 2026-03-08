@@ -15,7 +15,10 @@ from uuid import uuid4
 from typing import Optional, List
 
 from fastapi import APIRouter, Request, File, Form, UploadFile, HTTPException
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
+import base64
+import json
 
 from app.voice import vad, stt, tone_analysis, ssml_builder
 from app.mcp import intent_classifier, router as mcp_router, response_aggregator
@@ -101,8 +104,6 @@ class MedicineClassifierResponse(BaseModel):
     session_id: str
 
 
-from pydantic import BaseModel, Field
-
 class HealthLogRequest(BaseModel):
     session_id: str
     condition: str = "other"
@@ -139,10 +140,26 @@ async def process_query(request: Request):
     → MCP Tool Routing → Redis Cache → LLM Response
     → SSML Formatting (per-intent tone) → TTS → Audio URL
     """
-    metrics = RequestMetrics()
+    metrics    = RequestMetrics()
     session_id = str(uuid4())
     transcript = ""
     audio_bytes = None
+    _pipeline_start = time.perf_counter()
+
+    def _ts(label: str, elapsed_ms: int | None = None) -> None:
+        """Print a compact stage timestamp directly to the terminal."""
+        wall = __import__('datetime').datetime.now().strftime('%H:%M:%S.%f')[:-3]
+        if elapsed_ms is None:
+            print(f"\033[96m  ▶ [{wall}]  {label}\033[0m", flush=True)
+        else:
+            badge = ("\033[92m✓\033[0m" if elapsed_ms < 800
+                     else "\033[93m✓\033[0m" if elapsed_ms < 1500
+                     else "\033[91m✓\033[0m")
+            print(f"\033[92m  {badge} [{wall}]  {label:<35} {elapsed_ms:>5} ms\033[0m", flush=True)
+
+    print(f"\n\033[1m\033[97m{'═'*60}\033[0m", flush=True)
+    print(f"\033[1m\033[97m  🎙  NEW VOICE REQUEST  [{__import__('datetime').datetime.now().strftime('%H:%M:%S.%f')[:-3]}]  session:{session_id[:8]}…\033[0m", flush=True)
+    print(f"\033[1m\033[97m{'═'*60}\033[0m", flush=True)
 
     content_type = request.headers.get("content-type", "")
     user_lat: float | None = None
@@ -178,6 +195,7 @@ async def process_query(request: Request):
 
     # ── Voice path: VAD + STT ──────────────────────────────────────
     if audio_bytes:
+        _ts("STT  — VAD + Whisper transcription")
         t0 = time.perf_counter()
         try:
             audio_array = vad.process_audio(audio_bytes)
@@ -187,6 +205,7 @@ async def process_query(request: Request):
         stt_result = stt.transcribe(audio_array, whisper_model)
         transcript = stt_result.transcript
         metrics.stt_ms = int((time.perf_counter() - t0) * 1000)
+        _ts(f"STT  — done  transcript: '{transcript[:50]}{'…' if len(transcript)>50 else ''}'  (lang={stt_result.language}, conf={stt_result.confidence:.2f})", metrics.stt_ms)
 
     if not transcript:
         raise HTTPException(status_code=400, detail="No text or audio content provided")
@@ -195,9 +214,11 @@ async def process_query(request: Request):
     tone_result = tone_analysis.analyze_tone(transcript)
 
     # ── Intent classification → LLM ───────────────────────────────
+    _ts("INTENT — classifying intent via LLM")
     t0 = time.perf_counter()
     intent_result = intent_classifier.classify_intent(transcript, llm_client)
     metrics.intent_ms = int((time.perf_counter() - t0) * 1000)
+    _ts(f"INTENT — done  intent='{intent_result.intent}'", metrics.intent_ms)
 
     # ── Inject exact GPS coords into entities for nearby_clinic intent ──
     if intent_result.intent == "nearby_clinic" and user_lat and user_lng:
@@ -206,11 +227,19 @@ async def process_query(request: Request):
         logger.info(f"[GPS] Using exact coords: lat={user_lat}, lng={user_lng}")
 
     # ── MCP Tool Orchestration ─────────────────────────────────────
+    # Skip tool routing for general conversation — no external data needed
     t0 = time.perf_counter()
-    tool_outputs = await mcp_router.route_to_tools(
-        intent_result, redis_db1, redis_db0, session_id, gemini_client
-    )
-    metrics.tool_ms = int((time.perf_counter() - t0) * 1000)
+    if intent_result.intent == "general_conversation":
+        _ts("TOOLS — skipped (general_conversation)", 0)
+        tool_outputs = []
+        metrics.tool_ms = 0
+    else:
+        _ts(f"TOOLS — routing to MCP tool for intent='{intent_result.intent}'")
+        tool_outputs = await mcp_router.route_to_tools(
+            intent_result, redis_db1, redis_db0, session_id, gemini_client
+        )
+        metrics.tool_ms = int((time.perf_counter() - t0) * 1000)
+        _ts(f"TOOLS — done  ({len(tool_outputs)} output(s))", metrics.tool_ms)
     metrics.cache_hit = any(o.error is None and o.result for o in tool_outputs)
 
     # ── Context update (Redis DB0 — conversation history) ───────────────────
@@ -218,11 +247,13 @@ async def process_query(request: Request):
     context_history = db0_context.get_context(redis_db0, session_id)
 
     # ── LLM Response Generation ────────────────────────────────────
+    _ts("LLM  — generating response")
     t0 = time.perf_counter()
     text_response = response_aggregator.aggregate_response(
         tool_outputs, intent_result, context_history, llm_client
     )
     metrics.llm_ms = int((time.perf_counter() - t0) * 1000)
+    _ts(f"LLM  — done  ({len(text_response)} chars)", metrics.llm_ms)
 
     db0_context.append_context(redis_db0, session_id, "assistant", text_response)
 
@@ -232,13 +263,12 @@ async def process_query(request: Request):
     # general_conversation → neutral
     ssml_tone = response_aggregator.get_ssml_tone(intent_result.intent)
     t0 = time.perf_counter()
-    ssml = ssml_builder.build_ssml(text_response, ssml_tone)
 
-    # ── TTS Synthesis ──────────────────────────────────────────────
-    audio_url = _save_audio_file(kokoro_engine, ssml)
-    metrics.tts_ms = int((time.perf_counter() - t0) * 1000)
-
-    record_latency(metrics, session_id)
+    # Truncate response for TTS — long text → long synthesis time
+    # 800 chars ≈ 45–55 seconds of speech, well within a useful reply
+    from app.llm.formatter import strip_markdown, truncate_response
+    tts_text = truncate_response(strip_markdown(text_response), max_chars=800)
+    ssml = ssml_builder.build_ssml(tts_text, ssml_tone)
 
     # Extract medicine / report data from tool outputs
     medicine_data = next((o.medicine_data for o in tool_outputs if o.medicine_data), None)
@@ -251,6 +281,47 @@ async def process_query(request: Request):
             if o.result and isinstance(o.result, dict) and "articles" in o.result:
                 news_data = o.result
                 break
+
+    if request.headers.get("x-streaming-audio") == "true":
+        async def event_generator():
+            # Send the complete response text and metadata FIRST
+            metadata = {
+                "text_response": text_response,
+                "audio_url": "", # Streaming natively
+                "tool_type": intent_result.intent,
+                "medicine_data": medicine_data,
+                "report_data": report_data,
+                "map_data": map_data,
+                "news_data": news_data,
+                "session_id": session_id
+            }
+            yield f'data: {json.dumps({"type": "metadata", "data": metadata})}\n\n'
+            
+            # Start generating and streaming audio chunk by chunk instantly
+            for chunk_bytes in kokoro_engine.synthesize_stream(ssml):
+                if chunk_bytes:
+                    b64 = base64.b64encode(chunk_bytes).decode("utf-8")
+                    yield f'data: {json.dumps({"type": "audio", "data": b64})}\n\n'
+                    
+            metrics.tts_ms = int((time.perf_counter() - t0) * 1000)
+            _ts("TTS  — done  (streamed entirely)", metrics.tts_ms)
+            
+            wall_total = int((time.perf_counter() - _pipeline_start) * 1000)
+            print(f"\033[97m  ⚡ WALL TOTAL (streaming): {wall_total} ms\033[0m", flush=True)
+            record_latency(metrics, session_id)
+
+        return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+    # ── Fallback: Standard TTS file write (if no streaming header) ────────────────
+    _ts(f"TTS  — synthesizing speech ({len(tts_text)} chars → Kokoro)")
+    audio_url = _save_audio_file(kokoro_engine, ssml)
+    metrics.tts_ms = int((time.perf_counter() - t0) * 1000)
+    _ts("TTS  — done  audio ready", metrics.tts_ms)
+
+    wall_total = int((time.perf_counter() - _pipeline_start) * 1000)
+    print(f"\033[97m  ⚡ WALL TOTAL (including I/O): {wall_total} ms\033[0m", flush=True)
+
+    record_latency(metrics, session_id)
 
     return ProcessResponse(
         text_response=text_response,

@@ -2,11 +2,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    # ── Groq LLM ──────────────────────────────────────────────────
+    # ── Groq / Default LLM ─────────────────────────────────────────
     groq_api_key: str = "placeholder"
-    llm_model: str = "llama-3.3-70b-versatile"
+    llm_model: str = "llama-3.1-8b-instant"
     llm_temperature: float = 0.3
-    llm_max_tokens: int = 512
+    llm_max_tokens: int = 200
     llm_timeout: int = 30
 
     # ── Health Dedicated LLM ───────────────────────────────────────
@@ -36,7 +36,7 @@ class Settings(BaseSettings):
 
     # ── Whisper ────────────────────────────────────────────────────
     whisper_model_size: str = "distil-whisper/distil-small.en"
-    whisper_device: str = "cpu"
+    whisper_device: str = "cpu"  # overridden at runtime by app/core/device.py
 
     # ── Audio ──────────────────────────────────────────────────────
     max_audio_duration_sec: int = 60

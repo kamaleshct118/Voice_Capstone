@@ -15,6 +15,9 @@ async def lifespan(app: FastAPI):
     # ── Startup ────────────────────────────────────────────────────
     logger.info("Starting Voice AI Healthcare Assistant v3.0")
 
+    # 0. Detect GPU/CPU — must happen FIRST before any model is loaded
+    from app.core.device import DEVICE, COMPUTE_TYPE
+
     # 1. Create static audio and health data directories
     os.makedirs(settings.static_audio_dir, exist_ok=True)
     os.makedirs(settings.health_excel_dir, exist_ok=True)
@@ -25,14 +28,29 @@ async def lifespan(app: FastAPI):
     from faster_whisper import WhisperModel
     app.state.whisper_model = WhisperModel(
         settings.whisper_model_size,
-        device=settings.whisper_device,
-        compute_type="int8",
+        device=DEVICE,
+        compute_type=COMPUTE_TYPE,
     )
-    logger.info(f"Whisper model loaded: {settings.whisper_model_size}")
+    print(
+        f"\033[92m[AI] Whisper STT running on {DEVICE.upper()} "
+        f"(compute={COMPUTE_TYPE})\033[0m",
+        flush=True,
+    )
+    logger.info(f"Whisper model loaded: {settings.whisper_model_size} device={DEVICE}")
 
     # 3. Load Kokoro TTS engine
     from app.tts.kokoro_engine import KokoroEngine
     app.state.kokoro_engine = KokoroEngine()
+    # Warmup: trigger JIT compilation so first real request is fast
+    if app.state.kokoro_engine.available:
+        import tempfile, os as _os
+        _warmup_path = _os.path.join(settings.static_audio_dir, "_warmup.wav")
+        app.state.kokoro_engine.synthesize("Ready.", _warmup_path)
+        try:
+            _os.remove(_warmup_path)
+        except OSError:
+            pass
+        logger.info("Kokoro TTS warmed up successfully")
 
     # 4. Initialize Groq LLM client
     from app.llm.client import LLMClient

@@ -93,6 +93,79 @@ const ChatInput = ({ onResponse, onError, onAbort, status, onStatusChange, sessi
     stopAll();
   }, [stopAll]);
 
+  // ── Stream Reader & Audio Player ─────────────────────────────────
+  const handleStreamResponse = async (res: Response, query: string, controller: AbortController) => {
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error("No response body");
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let audioCtx: AudioContext | null = null;
+    let nextPlayTime = 0;
+
+    window.addEventListener("stop-audio-playback", () => {
+      if (audioCtx?.state !== "closed") audioCtx?.close();
+    }, { once: true });
+
+    try {
+      while (true) {
+        if (controller.signal.aborted) break;
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const msgStr = line.replace("data: ", "").trim();
+          if (!msgStr) continue;
+
+          try {
+            const msg = JSON.parse(msgStr);
+            if (msg.type === "metadata") {
+              onStatusChange("ready");
+              onResponse(msg.data, query);
+            } else if (msg.type === "audio") {
+              if (!audioCtx) {
+                audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+                nextPlayTime = audioCtx.currentTime + 0.1; // small buffer
+              }
+              const binaryString = atob(msg.data);
+              const len = binaryString.length;
+              const bytes = new Uint8Array(len);
+              for (let i = 0; i < len; i++) bytes[i] = binaryString.charCodeAt(i);
+
+              const floatData = new Float32Array(bytes.length / 2);
+              const dataView = new DataView(bytes.buffer);
+              for (let i = 0; i < floatData.length; i++) {
+                floatData[i] = dataView.getInt16(i * 2, true) / 32768.0;
+              }
+
+              const audioBuffer = audioCtx.createBuffer(1, floatData.length, 24000);
+              audioBuffer.getChannelData(0).set(floatData);
+
+              const source = audioCtx.createBufferSource();
+              source.buffer = audioBuffer;
+              source.connect(audioCtx.destination);
+
+              if (nextPlayTime < audioCtx.currentTime) {
+                nextPlayTime = audioCtx.currentTime + 0.05;
+              }
+              source.start(nextPlayTime);
+              nextPlayTime += audioBuffer.duration;
+            }
+          } catch (e) {
+            console.error("Stream parse error", e);
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  };
+
   // ── Send audio ─────────────────────────────────────────────────
   const sendAudio = useCallback(
     async (blob: Blob) => {
@@ -107,11 +180,15 @@ const ChatInput = ({ onResponse, onError, onAbort, status, onStatusChange, sessi
           formData.append("lat", String(userCoords.lat));
           formData.append("lng", String(userCoords.lng));
         }
-        const res = await fetch(`${API}/process`, { method: "POST", body: formData, signal: controller.signal });
+        const res = await fetch(`${API}/process`, {
+          method: "POST",
+          headers: { "x-streaming-audio": "true" },
+          body: formData,
+          signal: controller.signal
+        });
         if (!res.ok) throw new Error(`Server error: ${res.status}`);
-        const data: ApiResponse = await res.json();
-        onStatusChange("ready");
-        onResponse(data, "[Voice message]");
+
+        await handleStreamResponse(res, "[Voice message]", controller);
       } catch (err: any) {
         if (err.name === "AbortError") return; // silently cancel
         onStatusChange("error");
@@ -139,14 +216,16 @@ const ChatInput = ({ onResponse, onError, onAbort, status, onStatusChange, sessi
       }
       const res = await fetch(`${API}/process`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-streaming-audio": "true"
+        },
         body: JSON.stringify(payload),
         signal: controller.signal,
       });
       if (!res.ok) throw new Error(`Server error: ${res.status}`);
-      const data: ApiResponse = await res.json();
-      onStatusChange("ready");
-      onResponse(data, query);
+
+      await handleStreamResponse(res, query, controller);
     } catch (err: any) {
       if (err.name === "AbortError") return; // silently cancel
       onStatusChange("error");
