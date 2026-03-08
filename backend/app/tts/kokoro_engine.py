@@ -40,6 +40,40 @@ class KokoroEngine:
         text = re.sub(r"\s+", " ", text).strip()
         return text
 
+    def synthesize_stream(self, ssml_text: str):
+        """
+        Yields raw 16-bit PCM audio bytes chunk-by-chunk for instant streaming to the frontend.
+        """
+        if not self.available or self.pipeline is None:
+            yield b""
+            return
+
+        plain_text = self._strip_ssml_tags(ssml_text)
+        
+        try:
+            for _, _, audio in self.pipeline(plain_text, voice="af_heart"):
+                if audio is not None:
+                    import torch
+                    if isinstance(audio, torch.Tensor):
+                        chunk = audio.detach().cpu().numpy()
+                    else:
+                        chunk = np.asarray(audio)
+                        
+                    # Convert float32 [-1, 1] to int16 PCM
+                    chunk = np.squeeze(chunk).astype(np.float32)
+                    pcm16 = (chunk * 32767).astype(np.int16)
+                    yield pcm16.tobytes()
+
+            try:
+                from app.core.device import free_gpu_cache
+                free_gpu_cache()
+            except Exception:
+                pass
+                
+        except Exception as e:
+            logger.error(f"TTS stream error: {e}")
+            yield b""
+
     def synthesize(self, ssml_text: str, output_path: str) -> str:
         """
         Convert SSML text to WAV audio file.

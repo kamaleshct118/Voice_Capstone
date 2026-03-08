@@ -15,7 +15,10 @@ from uuid import uuid4
 from typing import Optional, List
 
 from fastapi import APIRouter, Request, File, Form, UploadFile, HTTPException
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
+import base64
+import json
 
 from app.voice import vad, stt, tone_analysis, ssml_builder
 from app.mcp import intent_classifier, router as mcp_router, response_aggregator
@@ -100,8 +103,6 @@ class MedicineClassifierResponse(BaseModel):
     audio_url: str
     session_id: str
 
-
-from pydantic import BaseModel, Field
 
 class HealthLogRequest(BaseModel):
     session_id: str
@@ -269,17 +270,6 @@ async def process_query(request: Request):
     tts_text = truncate_response(strip_markdown(text_response), max_chars=800)
     ssml = ssml_builder.build_ssml(tts_text, ssml_tone)
 
-    # ── TTS Synthesis ──────────────────────────────────────────────
-    _ts(f"TTS  — synthesizing speech ({len(tts_text)} chars → Kokoro)")
-    audio_url = _save_audio_file(kokoro_engine, ssml)
-    metrics.tts_ms = int((time.perf_counter() - t0) * 1000)
-    _ts("TTS  — done  audio ready", metrics.tts_ms)
-
-    wall_total = int((time.perf_counter() - _pipeline_start) * 1000)
-    print(f"\033[97m  ⚡ WALL TOTAL (including I/O): {wall_total} ms\033[0m", flush=True)
-
-    record_latency(metrics, session_id)
-
     # Extract medicine / report data from tool outputs
     medicine_data = next((o.medicine_data for o in tool_outputs if o.medicine_data), None)
     report_data = next((o.report_data for o in tool_outputs if getattr(o, "report_data", None)), None)  # type: ignore[attr-defined]
@@ -291,6 +281,47 @@ async def process_query(request: Request):
             if o.result and isinstance(o.result, dict) and "articles" in o.result:
                 news_data = o.result
                 break
+
+    if request.headers.get("x-streaming-audio") == "true":
+        async def event_generator():
+            # Send the complete response text and metadata FIRST
+            metadata = {
+                "text_response": text_response,
+                "audio_url": "", # Streaming natively
+                "tool_type": intent_result.intent,
+                "medicine_data": medicine_data,
+                "report_data": report_data,
+                "map_data": map_data,
+                "news_data": news_data,
+                "session_id": session_id
+            }
+            yield f'data: {json.dumps({"type": "metadata", "data": metadata})}\n\n'
+            
+            # Start generating and streaming audio chunk by chunk instantly
+            for chunk_bytes in kokoro_engine.synthesize_stream(ssml):
+                if chunk_bytes:
+                    b64 = base64.b64encode(chunk_bytes).decode("utf-8")
+                    yield f'data: {json.dumps({"type": "audio", "data": b64})}\n\n'
+                    
+            metrics.tts_ms = int((time.perf_counter() - t0) * 1000)
+            _ts("TTS  — done  (streamed entirely)", metrics.tts_ms)
+            
+            wall_total = int((time.perf_counter() - _pipeline_start) * 1000)
+            print(f"\033[97m  ⚡ WALL TOTAL (streaming): {wall_total} ms\033[0m", flush=True)
+            record_latency(metrics, session_id)
+
+        return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+    # ── Fallback: Standard TTS file write (if no streaming header) ────────────────
+    _ts(f"TTS  — synthesizing speech ({len(tts_text)} chars → Kokoro)")
+    audio_url = _save_audio_file(kokoro_engine, ssml)
+    metrics.tts_ms = int((time.perf_counter() - t0) * 1000)
+    _ts("TTS  — done  audio ready", metrics.tts_ms)
+
+    wall_total = int((time.perf_counter() - _pipeline_start) * 1000)
+    print(f"\033[97m  ⚡ WALL TOTAL (including I/O): {wall_total} ms\033[0m", flush=True)
+
+    record_latency(metrics, session_id)
 
     return ProcessResponse(
         text_response=text_response,

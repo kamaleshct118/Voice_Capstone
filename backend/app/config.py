@@ -2,9 +2,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    # ── Groq LLM ──────────────────────────────────────────────────
+    # ── Groq / Default LLM ─────────────────────────────────────────
     groq_api_key: str = "placeholder"
-    llm_model: str = "llama-3.3-70b-versatile"
+    llm_model: str = "llama-3.1-8b-instant"
     llm_temperature: float = 0.3
     llm_max_tokens: int = 200
     llm_timeout: int = 30
