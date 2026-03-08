@@ -19,7 +19,7 @@ def transcribe(audio_array: np.ndarray, model: WhisperModel) -> STTResult:
     """
     segments_iter, info = model.transcribe(
         audio_array,
-        beam_size=5,
+        beam_size=1,
         language=None,  # auto-detect
         vad_filter=False,  # already handled by vad.py
     )

@@ -11,14 +11,24 @@ class KokoroEngine:
     Kokoro TTS engine wrapper.
     Loaded once at startup; reused for all requests.
     Converts SSML text → WAV audio file.
+    Runs on GPU (CUDA) when available, falls back to CPU.
     """
 
     def __init__(self, lang_code: str = "a"):
+        # Resolve device — import here to avoid circular imports at module level
+        try:
+            from app.core.device import DEVICE_TTS
+            self._device = DEVICE_TTS
+        except Exception:
+            self._device = "cpu"
+
         try:
             from kokoro import KPipeline
-            self.pipeline = KPipeline(lang_code=lang_code)
+            # Pass device so Kokoro moves its tensors to GPU when available
+            self.pipeline = KPipeline(lang_code=lang_code, device=self._device)
             self.available = True
-            logger.info(f"Kokoro TTS loaded: lang_code={lang_code}")
+            logger.info(f"Kokoro TTS loaded: lang_code={lang_code} device={self._device}")
+            print(f"\033[92m[AI] Kokoro TTS running on {self._device.upper()}\033[0m", flush=True)
         except Exception as e:
             logger.warning(f"Kokoro TTS unavailable: {e}. Falling back to silent mode.")
             self.pipeline = None
@@ -47,18 +57,34 @@ class KokoroEngine:
 
         try:
             import soundfile as sf
-            audio_chunks = []
-            for _, _, audio in self.pipeline(plain_text, voice="af_heart"):
-                if audio is not None:
-                    audio_chunks.append(audio)
+            wrote_audio = False
+            with sf.SoundFile(
+                output_path, mode="w", samplerate=24000, channels=1, subtype="PCM_16"
+            ) as f:
+                for _, _, audio in self.pipeline(plain_text, voice="af_heart"):
+                    if audio is not None:
+                        # Move GPU tensor → CPU numpy before soundfile can write it
+                        import torch
+                        if isinstance(audio, torch.Tensor):
+                            chunk = audio.detach().cpu().numpy()
+                        else:
+                            chunk = np.asarray(audio)
+                        chunk = np.squeeze(chunk).astype(np.float32)
+                        f.write(chunk)
+                        wrote_audio = True
 
-            if audio_chunks:
-                full_audio = np.concatenate(audio_chunks, axis=0)
-                sf.write(output_path, full_audio, samplerate=24000)
-                logger.info(f"TTS synthesis complete: {output_path}")
+            if wrote_audio:
+                logger.info(f"TTS synthesis complete (streamed): {output_path}")
             else:
                 self._write_silent_wav(output_path)
                 logger.warning("Kokoro produced no audio — wrote silent WAV")
+
+            # Release unused VRAM after synthesis (important for 4GB GPU)
+            try:
+                from app.core.device import free_gpu_cache
+                free_gpu_cache()
+            except Exception:
+                pass
 
         except Exception as e:
             logger.error(f"TTS synthesis error: {e}")
