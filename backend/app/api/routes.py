@@ -240,7 +240,7 @@ async def process_query(request: Request):
         )
         metrics.tool_ms = int((time.perf_counter() - t0) * 1000)
         _ts(f"TOOLS — done  ({len(tool_outputs)} output(s))", metrics.tool_ms)
-    metrics.cache_hit = any(o.error is None and o.result for o in tool_outputs)
+    metrics.cache_hit = any(getattr(o, "cached", False) for o in tool_outputs)
 
     # ── Context update (Redis DB0 — conversation history) ───────────────────
     db0_context.append_context(redis_db0, session_id, "user", transcript)
@@ -612,3 +612,18 @@ async def get_conversation_history(session_id: str):
     except Exception as e:
         logger.error(f"Error retrieving conversation history: {e}")
         raise HTTPException(status_code=500, detail="Failed to retrieve conversation history")
+
+# ── GET /api/metrics ──────────────────────────────────────────────
+
+@router.get("/metrics")
+async def get_system_metrics():
+    """
+    Retrieve performance and latency metrics for the Evaluation Page.
+    """
+    try:
+        raw_metrics = redis_db1.lrange("system_latency_metrics", 0, -1)
+        parsed_metrics = [json.loads(m) for m in raw_metrics]
+        return {"metrics": parsed_metrics, "count": len(parsed_metrics)}
+    except Exception as e:
+        logger.error(f"Error retrieving system metrics: {e}")
+        return {"metrics": [], "count": 0, "error": str(e)}

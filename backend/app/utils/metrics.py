@@ -105,10 +105,30 @@ def record_latency(metrics: RequestMetrics, session_id: str) -> None:
 
     # Also keep the structured JSON log for file-based monitoring
     from app.utils.logger import get_logger
+    import json
     logger = get_logger("metrics")
     logger.info(
         f"session={session_id} stt={metrics.stt_ms}ms intent={metrics.intent_ms}ms "
         f"tool={metrics.tool_ms}ms llm={metrics.llm_ms}ms tts={metrics.tts_ms}ms "
         f"total={metrics.total_ms}ms cache_hit={metrics.cache_hit}"
     )
-
+    
+    # Save to Redis for Frontend Dashboard
+    try:
+        from app.cache.redis_client import redis_db1
+        metric_data = {
+            "session_id": session_id,
+            "stt_ms": metrics.stt_ms,
+            "intent_ms": metrics.intent_ms,
+            "tool_ms": metrics.tool_ms,
+            "llm_ms": metrics.llm_ms,
+            "tts_ms": metrics.tts_ms,
+            "total_ms": metrics.total_ms,
+            "cache_hit": metrics.cache_hit,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        redis_db1.lpush("system_latency_metrics", json.dumps(metric_data))
+        # Keep only the last 1000 requests to avoid ballooning memory
+        redis_db1.ltrim("system_latency_metrics", 0, 999)
+    except Exception as e:
+        logger.error(f"Failed to save metrics to Redis: {e}")

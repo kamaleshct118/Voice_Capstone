@@ -78,14 +78,14 @@ const MicRecorder = ({ onResponse, onError, status, onStatusChange }: MicRecorde
         onClick={handleClick}
         disabled={isProcessing}
         className={`relative w-24 h-24 rounded-full flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-4 focus-visible:ring-ring
-          ${isRecording 
-            ? "bg-destructive animate-recording-pulse" 
-            : isProcessing 
-              ? "bg-muted cursor-not-allowed" 
+          ${isRecording
+            ? "bg-destructive animate-recording-pulse"
+            : isProcessing
+              ? "bg-muted cursor-not-allowed"
               : "bg-primary animate-mic-glow hover:brightness-110"
           }`}
         whileTap={!isProcessing ? { scale: 0.93 } : {}}
-        aria-label={isRecording ? "Stop recording" : "Start recording"}
+        aria-label={isRecording ? "Start recording" : "Start recording"}
       >
         <AnimatePresence mode="wait">
           {isProcessing ? (

@@ -128,6 +128,10 @@ def parse_db0_key(key: str, client) -> Optional[Dict[str, Any]]:
 def parse_db1_key(key: str, client) -> Optional[Dict[str, Any]]:
     """Parse a DB1 key and extract cached tool information."""
     try:
+        # Ignore system metrics list to avoid WRONGTYPE errors on GET
+        if key == "system_latency_metrics":
+            return None
+
         raw = client.get(key)
         if not raw:
             return None
@@ -135,59 +139,77 @@ def parse_db1_key(key: str, client) -> Optional[Dict[str, Any]]:
         data = json.loads(raw)
         ttl = client.ttl(key)
         
-        # Determine tool type from data structure
         tool_name = "unknown"
         query_info = "Unknown query"
         data_preview = {}
-        
-        if "medicine_name" in data:
-            tool_name = "medicine_classifier"
-            query_info = f"Medicine: {data.get('medicine_name', 'N/A')}"
-            data_preview = {
-                "medicine_name": data.get("medicine_name"),
-                "drug_category": data.get("drug_category"),
-                "purpose": data.get("purpose", "")[:100]
-            }
-        
-        elif "articles" in data:
-            tool_name = "medical_news"
-            query_info = f"News topic: {data.get('topic', 'N/A')}"
-            articles = data.get("articles", [])
-            data_preview = {
-                "topic": data.get("topic"),
-                "article_count": len(articles),
-                "latest_article": articles[0].get("title") if articles else None
-            }
-        
-        elif "drug_name" in data or "brand_name" in data:
-            tool_name = "medical_api"
-            query_info = f"Drug: {data.get('drug_name') or data.get('brand_name', 'N/A')}"
-            data_preview = {
-                "drug_name": data.get("drug_name"),
-                "brand_name": data.get("brand_name"),
-                "manufacturer": data.get("manufacturer")
-            }
-        
-        elif "summary" in data and "flagged_readings" in data:
-            tool_name = "health_analysis"
-            query_info = "Health trend analysis"
-            data_preview = {
-                "summary": data.get("summary", "")[:100],
-                "flagged_count": len(data.get("flagged_readings", []))
-            }
-        
-        elif "report_title" in data:
-            tool_name = "medical_report"
-            query_info = "Medical report"
-            data_preview = {
-                "title": data.get("report_title"),
-                "conditions": data.get("health_conditions", "")[:100]
-            }
-        
+
+        # 1. Handle our new Universal ToolOutput Cache Format
+        if "tool_name" in data and "result" in data:
+            tool_name = data["tool_name"]
+            
+            if tool_name == "nearby_clinic":
+                query_info = f"Map/Clinic Search"
+                hospitals = data.get("result", {}).get("hospitals", [])
+                data_preview = {
+                    "hospitals_found": len(hospitals),
+                    "first_result": hospitals[0].get("name") if hospitals else "None",
+                    "map_center": data.get("map_data", {}).get("center")
+                }
+            elif tool_name == "medicine_info":
+                drug = data.get("medicine_data", {}).get("medicine_name", "N/A")
+                query_info = f"Medicine: {drug}"
+                data_preview = data.get("medicine_data", {})
+            elif tool_name == "medical_news":
+                query_info = f"Medical News"
+                data_preview = {"articles": len(data.get("result", {}).get("articles", []))}
+            elif tool_name == "medical_report":
+                query_info = f"Medical Report Gen"
+                data_preview = {"status": "Cached Report"}
+            elif tool_name == "health_monitoring":
+                query_info = f"Health Chat Q&A"
+                data_preview = {"status": "Cached Answer"}
+            else:
+                query_info = f"Tool: {tool_name}"
+                data_preview = data.get("result", {})
+
+        # 2. Legacy fallback for old direct DB1 cache structures
+        else:
+            if "medicine_name" in data:
+                tool_name = "medicine_classifier"
+                query_info = f"Medicine: {data.get('medicine_name', 'N/A')}"
+                data_preview = {
+                    "medicine_name": data.get("medicine_name"),
+                    "drug_category": data.get("drug_category"),
+                    "purpose": data.get("purpose", "")[:100]
+                }
+            elif "articles" in data:
+                tool_name = "medical_news"
+                query_info = f"News topic: {data.get('topic', 'N/A')}"
+                articles = data.get("articles", [])
+                data_preview = {
+                    "topic": data.get("topic"),
+                    "article_count": len(articles),
+                    "latest_article": articles[0].get("title") if articles else None
+                }
+            elif "summary" in data and "flagged_readings" in data:
+                tool_name = "health_analysis"
+                query_info = "Health trend analysis"
+                data_preview = {
+                    "summary": data.get("summary", "")[:100],
+                    "flagged_count": len(data.get("flagged_readings", []))
+                }
+            elif "report_title" in data:
+                tool_name = "medical_report"
+                query_info = "Medical report"
+                data_preview = {
+                    "title": data.get("report_title"),
+                    "conditions": data.get("health_conditions", "")[:100]
+                }
+
         return {
             "key": key,
             "tool_name": tool_name,
-            "cache_key_hash": key[:16] + "...",
+            "cache_key_hash": key[:16] + "..." if len(key) > 16 else key,
             "query_info": query_info,
             "ttl_seconds": ttl,
             "cached_at": None,

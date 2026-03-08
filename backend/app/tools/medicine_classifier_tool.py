@@ -151,7 +151,7 @@ Strictly limit response to 100 words."""
 def parse_medicine_info(text: str):
     med_name = "Unknown"
     generic = "Unknown"
-    for line in text.split('\\n'):
+    for line in text.split('\n'):
         if line.startswith("Medicine:"):
             med_name = line.replace("Medicine:", "").strip()
         if line.startswith("Generic:"):

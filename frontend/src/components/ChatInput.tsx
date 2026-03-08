@@ -18,6 +18,7 @@ type GeoStatus = "idle" | "requesting" | "granted" | "denied";
 
 const ChatInput = ({ onResponse, onError, onAbort, status, onStatusChange, sessionId }: ChatInputProps) => {
   const [text, setText] = useState("");
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [geoStatus, setGeoStatus] = useState<GeoStatus>("idle");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -235,14 +236,21 @@ const ChatInput = ({ onResponse, onError, onAbort, status, onStatusChange, sessi
     }
   }, [text, onResponse, onError, onStatusChange, sessionId, userCoords]);
 
-  // ── Send image (medicine classifier) ──────────────────────────
-  const sendImage = useCallback(
-    async (file: File) => {
+  // ── Send combined image+text or image only (medicine classifier) ──────────────────────────
+  const sendImageRequest = useCallback(
+    async () => {
+      if (!selectedImage) return;
       onStatusChange("processing");
+      const currentText = text.trim();
+      setText("");
+      setSelectedImage(null);
       try {
         const formData = new FormData();
-        formData.append("mode", "image");
-        formData.append("image", file);
+        formData.append("mode", currentText ? "image+text" : "image");
+        formData.append("image", selectedImage);
+        if (currentText) {
+          formData.append("medicine_name", currentText);
+        }
         formData.append("session_id", sessionId);
         const res = await fetch(`${API}/classify-medicine`, {
           method: "POST",
@@ -262,19 +270,27 @@ const ChatInput = ({ onResponse, onError, onAbort, status, onStatusChange, sessi
             purpose: raw.purpose,
             basic_safety_notes: raw.basic_safety_notes,
             disclaimer: raw.disclaimer,
-            input_mode: "image",
+            input_mode: currentText ? "image+text" : "image",
           },
           session_id: raw.session_id,
         };
         onStatusChange("ready");
-        onResponse(data, "[Medicine image]");
+        onResponse(data, currentText ? `[Image] ${currentText}` : "[Medicine image]");
       } catch (err: any) {
         onStatusChange("error");
         onError(err.message || "Failed to classify medicine image");
       }
     },
-    [onResponse, onError, onStatusChange, sessionId]
+    [selectedImage, text, onResponse, onError, onStatusChange, sessionId]
   );
+
+  const handleSubmit = useCallback(() => {
+    if (selectedImage) {
+      sendImageRequest();
+    } else {
+      sendText();
+    }
+  }, [selectedImage, sendImageRequest, sendText]);
 
   // ── Toggle microphone recording ────────────────────────────────
   const toggleRecording = useCallback(async () => {
@@ -305,14 +321,14 @@ const ChatInput = ({ onResponse, onError, onAbort, status, onStatusChange, sessi
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      sendText();
+      handleSubmit();
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      sendImage(file);
+      setSelectedImage(file);
       e.target.value = "";
     }
   };
@@ -368,6 +384,32 @@ const ChatInput = ({ onResponse, onError, onAbort, status, onStatusChange, sessi
           </button>
         )}
       </div>
+
+      {/* Image Preview Attachment */}
+      <AnimatePresence>
+        {selectedImage && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="flex items-center gap-2 mb-2 p-1.5 pr-2 w-max bg-muted/80 rounded-lg border border-border"
+          >
+            <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center shrink-0">
+              <Camera className="w-4 h-4 text-primary" />
+            </div>
+            <span className="text-xs text-foreground font-medium truncate max-w-[150px] sm:max-w-[200px]">
+              {selectedImage.name}
+            </span>
+            <button
+              onClick={() => setSelectedImage(null)}
+              className="ml-1 p-1 hover:bg-destructive/10 rounded-full text-muted-foreground hover:text-destructive transition-colors shrink-0"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Input row: Mic + Camera + Textarea */}
       <div className="flex items-end gap-2">
         {/* Mic button */}
@@ -435,8 +477,8 @@ const ChatInput = ({ onResponse, onError, onAbort, status, onStatusChange, sessi
             </button>
           ) : (
             <button
-              onClick={sendText}
-              disabled={!text.trim() || isRecording}
+              onClick={handleSubmit}
+              disabled={(!text.trim() && !selectedImage) || isRecording}
               className="absolute right-2 bottom-1.5 p-1.5 rounded-lg bg-primary text-primary-foreground disabled:opacity-30 hover:brightness-110 transition"
               aria-label="Send"
             >

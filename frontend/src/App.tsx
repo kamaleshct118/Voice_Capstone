@@ -7,6 +7,7 @@ import LandingPage from "./pages/LandingPage";
 import AssistantPage from "./pages/AssistantPage";
 import DataPage from "./pages/DataPage";
 import HealthMonitorPage from "@/pages/HealthMonitorPage";
+import EvaluationMetricsPage from "./pages/EvaluationMetricsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -22,6 +23,7 @@ const App = () => (
           <Route path="/assistant" element={<AssistantPage />} />
           <Route path="/data" element={<DataPage />} />
           <Route path="/health-monitor" element={<HealthMonitorPage />} />
+          <Route path="/metrics" element={<EvaluationMetricsPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

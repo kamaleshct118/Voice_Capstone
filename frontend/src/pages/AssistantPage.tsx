@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Activity, Wifi, AlertCircle, ArrowLeft } from "lucide-react";
+import { Activity, Wifi, AlertCircle, ArrowLeft, BarChart2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import ChatSidebar from "@/components/ChatSidebar";
@@ -76,12 +76,23 @@ const AssistantPage = () => {
                   Clinical Assistant
                 </h1>
               </div>
-              <span
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full text-primary-foreground ${st.color}`}
-              >
-                <Wifi className="w-3 h-3" />
-                {st.label}
-              </span>
+              <div className="flex items-center gap-3">
+                {history.length > 0 && (
+                  <Link
+                    to="/metrics"
+                    className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary rounded-full text-xs font-bold transition-colors"
+                  >
+                    <BarChart2 className="w-3.5 h-3.5" />
+                    Evaluation Metrics
+                  </Link>
+                )}
+                <span
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full text-primary-foreground ${st.color}`}
+                >
+                  <Wifi className="w-3 h-3" />
+                  {st.label}
+                </span>
+              </div>
             </div>
           </header>
 
@@ -206,6 +217,19 @@ const AssistantPage = () => {
               <div ref={bottomRef} />
             </div>
           </div>
+
+          {/* Floating Mobile Evaluation Button */}
+          {history.length > 0 && (
+            <div className="sm:hidden absolute bottom-[100px] left-0 right-0 flex justify-center z-30 pointer-events-none">
+              <Link
+                to="/metrics"
+                className="pointer-events-auto shadow-lg shadow-black/10 flex items-center gap-2 px-4 py-2 bg-card border border-border rounded-full text-sm font-bold text-foreground hover:bg-muted transition"
+              >
+                <BarChart2 className="w-4 h-4 text-primary" />
+                View Evaluation Metrics
+              </Link>
+            </div>
+          )}
 
           {/* ── Input bar ──────────────────────────────────────── */}
           <ChatInput
