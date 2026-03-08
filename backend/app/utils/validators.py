@@ -5,7 +5,7 @@ ALLOWED_AUDIO_TYPES = {
     "audio/ogg", "audio/mp4", "audio/x-wav",
 }
 ALLOWED_IMAGE_TYPES = {
-    "image/jpeg", "image/png", "image/webp", "image/gif",
+    "image/jpeg", "image/png", "image/webp", "image/gif", "image/jpg",
 }
 MAX_FILE_SIZE_MB = 10
 MAX_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
@@ -22,10 +22,10 @@ def validate_audio_file(file: UploadFile) -> None:
 
 def validate_image_file(file: UploadFile) -> None:
     ct = (file.content_type or "").split(";")[0].strip()
-    if ct not in ALLOWED_IMAGE_TYPES:
+    if not ct.startswith("image/"):
         raise HTTPException(
             status_code=400,
-            detail=f"Unsupported image type: {ct}. Allowed: {ALLOWED_IMAGE_TYPES}",
+            detail=f"Unsupported file type: {ct}. Please upload an image format.",
         )
 
 
