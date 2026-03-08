@@ -9,6 +9,7 @@ interface MedicineClassifierCardProps {
 
 const inputModeBadge: Record<string, { label: string; color: string }> = {
     image: { label: "📷 Image Scan", color: "bg-violet-500/15 text-violet-400 border-violet-500/30" },
+    "image+text": { label: "👁️‍🗨️ Image + Text", color: "bg-fuchsia-500/15 text-fuchsia-400 border-fuchsia-500/30" },
     voice: { label: "🎤 Voice", color: "bg-blue-500/15 text-blue-400 border-blue-500/30" },
     text: { label: "⌨️ Text", color: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" },
 };
@@ -44,11 +45,6 @@ const MedicineClassifierCard = ({ data }: MedicineClassifierCardProps) => {
             {/* Details */}
             <div className="space-y-3 text-sm">
                 <Row
-                    icon={<FlaskConical className="w-4 h-4 text-blue-400" />}
-                    label="Chemical Composition"
-                    value={data.chemical_composition}
-                />
-                <Row
                     icon={<Info className="w-4 h-4 text-emerald-400" />}
                     label="Purpose"
                     value={data.purpose}
@@ -80,9 +76,9 @@ const Row = ({
 }) => (
     <div className="flex gap-2">
         <div className="mt-0.5 shrink-0">{icon}</div>
-        <div>
-            <span className="text-muted-foreground font-medium">{label}: </span>
-            <span className="text-foreground">{value}</span>
+        <div className="flex-1">
+            <span className="text-muted-foreground font-medium">{label}</span>
+            <div className="text-foreground whitespace-pre-wrap mt-0.5 leading-relaxed">{value}</div>
         </div>
     </div>
 );

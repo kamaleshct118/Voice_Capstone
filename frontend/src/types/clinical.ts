@@ -41,7 +41,7 @@ export interface MedicineData {
   purpose: string;
   basic_safety_notes: string;
   disclaimer: string;
-  input_mode: "voice" | "text" | "image";
+  input_mode: "voice" | "text" | "image" | "image+text";
 }
 
 // ── Medical Report Tool output ────────────────────────────────────
