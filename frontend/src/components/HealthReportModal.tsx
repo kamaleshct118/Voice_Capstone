@@ -34,16 +34,16 @@ const HealthReportModal = ({ isOpen, onClose, report }: HealthReportModalProps) 
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] p-0 overflow-hidden flex flex-col glass-morphism border-primary/20 bg-card/95">
+            <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] p-0 overflow-hidden flex flex-col glass-morphism border-primary/20 bg-card/95 print:w-full print:max-w-full print:h-auto print:max-h-none print:shadow-none print:border-none print:bg-white print:text-black print:overflow-visible">
                 <DialogHeader className="p-6 pb-2">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                            <div className="p-2 rounded-xl bg-primary/20 text-primary">
+                            <div className="p-1.5 rounded-xl bg-primary/20 text-primary print:hidden">
                                 <FileText className="w-5 h-5" />
                             </div>
                             <div>
-                                <DialogTitle className="text-xl font-bold">Personalized Health Report</DialogTitle>
-                                <DialogDescription className="text-xs text-muted-foreground flex items-center gap-2 mt-1">
+                                <DialogTitle className="text-xl font-bold print:hidden">Personalized Health Report</DialogTitle>
+                                <DialogDescription className="text-xs text-muted-foreground flex items-center gap-2 mt-1 print:hidden">
                                     <Calendar className="w-3 h-3" />
                                     Generated on {new Date(report.generated_at).toLocaleDateString()} at {new Date(report.generated_at).toLocaleTimeString()}
                                 </DialogDescription>
@@ -58,114 +58,107 @@ const HealthReportModal = ({ isOpen, onClose, report }: HealthReportModalProps) 
                     </div>
                 </DialogHeader>
 
-                <ScrollArea className="flex-1 p-6">
-                    <div ref={reportRef} className="space-y-8 print:p-8">
-                        {/* 1. Dashboard summary banner */}
-                        <div className="p-5 rounded-2xl bg-primary/5 border border-primary/10 flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
-                            <div>
-                                <h3 className="text-sm font-semibold text-primary uppercase tracking-wider">Health Condition</h3>
-                                <p className="text-2xl font-bold text-foreground mt-1">{report.chronic_disease}</p>
+                <ScrollArea className="flex-1 p-2 sm:p-4 print:p-0 print:overflow-visible">
+                    <div ref={reportRef} className="space-y-3 print:m-0 print:p-0">
+                        <style>{`
+                            @media print {
+                                @page { size: A4 portrait; margin: 0.5cm; }
+                                #root { display: none !important; }
+                                /* Shadcn/Radix Dialog Portal */
+                                body > div[data-radix-portal] {
+                                    position: absolute !important;
+                                    top: 0 !important;
+                                    left: 0 !important;
+                                    width: 100% !important;
+                                    height: auto !important;
+                                    margin: 0 !important;
+                                    padding: 0 !important;
+                                }
+                                [role="dialog"] {
+                                    position: relative !important;
+                                    top: auto !important;
+                                    left: auto !important;
+                                    transform: none !important;
+                                    width: 100% !important;
+                                    max-width: 100% !important;
+                                    height: auto !important;
+                                    max-height: none !important;
+                                    box-shadow: none !important;
+                                    border: none !important;
+                                    background: white !important;
+                                }
+                                .print\\:hidden { display: none !important; }
+                            }
+                        `}</style>
+                        <div className="w-full bg-transparent">
+                            {/* 1. Dashboard summary banner -> now "Condition" */}
+                            <div className="text-center pb-2 border-b border-primary/20">
+                                <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">Condition</h3>
+                                <p className="text-xl font-bold text-primary uppercase tracking-widest">{report.chronic_disease}</p>
                             </div>
-                            <div className="text-right sm:text-right">
-                                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Recorded History</h3>
-                                <p className="text-xl font-bold text-foreground mt-1">{report.detailed_logs.length} Data Points</p>
-                            </div>
-                        </div>
 
-                        {/* 2. Visual Trends (Graphs) */}
-                        <section className="space-y-4">
-                            <h3 className="text-lg font-bold flex items-center gap-2 text-foreground">
-                                <TrendingUp className="w-5 h-5 text-emerald-400" />
-                                Interactive Health Trends
-                            </h3>
-                            <div className="p-4 rounded-2xl border border-border bg-card/50">
-                                <HealthTrendChart logs={report.detailed_logs} />
+                            {/* 2. Analysed Data Box */}
+                            <div className="p-4 rounded-xl border-2 border-primary/20 bg-card/60 space-y-2.5">
+                                <h3 className="text-lg font-bold flex items-center gap-2 text-foreground">
+                                    <Clipboard className="w-4 h-4 text-blue-400" />
+                                    Analysed Data
+                                </h3>
+                                <p className="text-xs text-foreground/80 leading-snug font-medium">
+                                    Based on {report.detailed_logs.length} data points and recent interactions, the AI assistant recommends the following wellness strategies:
+                                </p>
+                                <ul className="grid sm:grid-cols-2 gap-2 mt-2">
+                                    {report.health_tips.map((tip, i) => (
+                                        <li key={i} className="flex gap-2 text-xs bg-primary/5 p-2 rounded-lg border border-primary/10 items-start">
+                                            <span className="flex-shrink-0 w-4 h-4 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-[9px] mt-0.5">
+                                                {i + 1}
+                                            </span>
+                                            <span className="text-foreground leading-relaxed italic">{tip}</span>
+                                        </li>
+                                    ))}
+                                </ul>
                             </div>
-                        </section>
 
-                        {/* 3. Personalized Tips (6 Points) */}
-                        <section className="space-y-4">
-                            <h3 className="text-lg font-bold flex items-center gap-2 text-foreground">
-                                <Lightbulb className="w-5 h-5 text-amber-400" />
-                                AI-Generated Wellness Strategies
-                            </h3>
-                            <div className="grid sm:grid-cols-2 gap-3">
-                                {report.health_tips.map((tip, i) => (
-                                    <motion.div
-                                        key={i}
-                                        initial={{ opacity: 0, y: 10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        transition={{ delay: i * 0.1 }}
-                                        className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/10 flex gap-3 text-sm"
-                                    >
-                                        <span className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center font-bold text-xs ring-1 ring-amber-500/30">
-                                            {i + 1}
-                                        </span>
-                                        <p className="text-foreground leading-relaxed italic">{tip}</p>
-                                    </motion.div>
-                                ))}
+                            {/* 3. 2x2 Trends Grid */}
+                            <div className="grid sm:grid-cols-2 gap-3 mt-4">
+                                {/* Sugar Trend */}
+                                <div className="p-3 rounded-xl border border-border bg-card/50">
+                                    <h4 className="text-xs font-bold text-center mb-1.5 text-foreground tracking-wide uppercase">Sugar Trend</h4>
+                                    <div className="h-[170px] w-full">
+                                        <HealthTrendChart logs={report.detailed_logs} forceMetric="sugar" />
+                                    </div>
+                                </div>
+                                {/* Pressure Trend */}
+                                <div className="p-3 rounded-xl border border-border bg-card/50">
+                                    <h4 className="text-xs font-bold text-center mb-1.5 text-foreground tracking-wide uppercase">Pressure Trend</h4>
+                                    <div className="h-[170px] w-full">
+                                        <HealthTrendChart logs={report.detailed_logs} forceMetric="bp" />
+                                    </div>
+                                </div>
+                                {/* Weight Trend */}
+                                <div className="p-3 rounded-xl border border-border bg-card/50">
+                                    <h4 className="text-xs font-bold text-center mb-1.5 text-foreground tracking-wide uppercase">Weight Trend</h4>
+                                    <div className="h-[170px] w-full">
+                                        <HealthTrendChart logs={report.detailed_logs} forceMetric="weight" />
+                                    </div>
+                                </div>
+                                {/* Mood Trend */}
+                                <div className="p-3 rounded-xl border border-border bg-card/50">
+                                    <h4 className="text-xs font-bold text-center mb-1.5 text-foreground tracking-wide uppercase">Mood Trend</h4>
+                                    <div className="h-[170px] w-full">
+                                        <HealthTrendChart logs={report.detailed_logs} forceMetric="mood" />
+                                    </div>
+                                </div>
                             </div>
-                        </section>
 
-                        {/* 4. Detailed Data Table */}
-                        <section className="space-y-4">
-                            <h3 className="text-lg font-bold flex items-center gap-2 text-foreground">
-                                <Clipboard className="w-5 h-5 text-blue-400" />
-                                Detailed Observation Log
-                            </h3>
-                            <div className="rounded-xl border border-border overflow-hidden">
-                                <Table>
-                                    <TableHeader className="bg-muted/50">
-                                        <TableRow>
-                                            <TableHead className="text-xs uppercase">Date</TableHead>
-                                            <TableHead className="text-xs uppercase">Metric (BP/Sugar/Wh)</TableHead>
-                                            <TableHead className="text-xs uppercase">Symptoms/Notes</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {report.detailed_logs.map((log, i) => (
-                                            <TableRow key={i} className="hover:bg-primary/5 transition-colors">
-                                                <TableCell className="text-xs font-medium">
-                                                    {new Date(log.timestamp!).toLocaleDateString()}
-                                                </TableCell>
-                                                <TableCell className="text-xs space-y-1">
-                                                    {log.systolic_bp && (
-                                                        <div className="flex items-center gap-1">
-                                                            <span className="text-muted-foreground w-12">BP:</span>
-                                                            <span className="font-semibold text-rose-400">{log.systolic_bp}/{log.diastolic_bp}</span>
-                                                        </div>
-                                                    )}
-                                                    {log.sugar_fasting && (
-                                                        <div className="flex items-center gap-1">
-                                                            <span className="text-muted-foreground w-12">Sugar:</span>
-                                                            <span className="font-semibold text-emerald-400">{log.sugar_fasting} F / {log.sugar_postmeal} PM</span>
-                                                        </div>
-                                                    )}
-                                                    {log.weight_kg && (
-                                                        <div className="flex items-center gap-1">
-                                                            <span className="text-muted-foreground w-12">Wh:</span>
-                                                            <span className="font-semibold text-amber-400">{log.weight_kg} kg</span>
-                                                        </div>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell className="text-xs italic text-muted-foreground max-w-[200px] truncate">
-                                                    {log.symptoms?.join(", ") || log.notes || "—"}
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
+                            {/* Disclaimer */}
+                            <div className="p-1.5 rounded-md bg-destructive/10 border border-destructive/20 text-[7px] text-destructive italic text-center leading-tight mt-2">
+                                <strong>Disclaimer:</strong> {report.disclaimer}
                             </div>
-                        </section>
-
-                        {/* 5. Disclaimer */}
-                        <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-[10px] text-destructive italic text-center leading-relaxed">
-                            <strong>Disclaimer:</strong> {report.disclaimer}
                         </div>
                     </div>
                 </ScrollArea>
 
-                <DialogFooter className="p-6 pt-2 border-t border-border bg-muted/20">
+                <DialogFooter className="p-4 border-t border-border bg-muted/20 print:hidden">
                     <Button onClick={onClose} className="rounded-xl w-full sm:w-auto">Close Report</Button>
                 </DialogFooter>
             </DialogContent>

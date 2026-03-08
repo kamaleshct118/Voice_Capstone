@@ -9,6 +9,7 @@ import type { HealthLogEntry } from "@/types/clinical";
 
 interface HealthTrendChartProps {
     logs: HealthLogEntry[];
+    forceMetric?: Metric;
 }
 
 type Metric = "bp" | "sugar" | "weight" | "mood";
@@ -22,8 +23,9 @@ const TABS: { key: Metric; label: string }[] = [
 
 const COLORS = ['#10b981', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6'];
 
-const HealthTrendChart = ({ logs }: HealthTrendChartProps) => {
+const HealthTrendChart = ({ logs, forceMetric }: HealthTrendChartProps) => {
     const [metric, setMetric] = useState<Metric>("bp");
+    const activeMetric = forceMetric || metric;
 
     const chartData = useMemo(() => {
         return logs.map((log, i) => ({
@@ -38,7 +40,7 @@ const HealthTrendChart = ({ logs }: HealthTrendChartProps) => {
     }, [logs]);
 
     const moodData = useMemo(() => {
-        if (metric !== 'mood') return [];
+        if (activeMetric !== 'mood') return [];
         const counts: Record<string, number> = {};
         logs.forEach(log => {
             if (log.mood) {
@@ -49,31 +51,33 @@ const HealthTrendChart = ({ logs }: HealthTrendChartProps) => {
     }, [logs, metric]);
 
     return (
-        <div className="space-y-4">
+        <div className="flex flex-col h-full space-y-4">
             {/* Tab switcher */}
-            <div className="flex flex-wrap gap-1 bg-muted/50 rounded-xl p-1.5">
-                {TABS.map((t) => (
-                    <button
-                        key={t.key}
-                        onClick={() => setMetric(t.key)}
-                        className={`flex-1 min-w-[100px] py-1.5 text-xs font-medium rounded-lg transition-all ${metric === t.key
-                            ? "bg-background text-foreground shadow-sm ring-1 ring-border"
-                            : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                            }`}
-                    >
-                        {t.label}
-                    </button>
-                ))}
-            </div>
+            {!forceMetric && (
+                <div className="flex flex-wrap gap-1 bg-muted/50 rounded-xl p-1.5 shrink-0">
+                    {TABS.map((t) => (
+                        <button
+                            key={t.key}
+                            onClick={() => setMetric(t.key)}
+                            className={`flex-1 min-w-[100px] py-1.5 text-xs font-medium rounded-lg transition-all ${metric === t.key
+                                ? "bg-background text-foreground shadow-sm ring-1 ring-border"
+                                : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                                }`}
+                        >
+                            {t.label}
+                        </button>
+                    ))}
+                </div>
+            )}
 
             {/* Chart */}
-            <div className="h-64 w-full">
+            <div className={`w-full ${forceMetric ? 'flex-1 min-h-0' : 'h-64'}`}>
                 {logs.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-sm border-2 border-dashed border-border/50 rounded-xl">
                         <span className="mb-2">📊</span>
                         No data yet. Log your first reading.
                     </div>
-                ) : metric === "mood" && moodData.length === 0 ? (
+                ) : activeMetric === "mood" && moodData.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-sm border-2 border-dashed border-border/50 rounded-xl">
                         <span className="mb-2">🎭</span>
                         No mood data logged yet.
@@ -81,7 +85,7 @@ const HealthTrendChart = ({ logs }: HealthTrendChartProps) => {
                 ) : (
                     <ResponsiveContainer width="100%" height="100%">
                         {/* Wrapper trick: instead of inline conditional which returns booleans, we use block level assignments or conditional rendering that ensures exactly ONE child. */}
-                        {metric === "bp" ? (
+                        {activeMetric === "bp" ? (
                             <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                 <defs>
                                     <linearGradient id="sysColor" x1="0" y1="0" x2="0" y2="1">
@@ -109,7 +113,7 @@ const HealthTrendChart = ({ logs }: HealthTrendChartProps) => {
                                 <Line type="monotone" dataKey="systolic" stroke="#ef4444" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: "hsl(var(--background))" }} activeDot={{ r: 6 }} name="Systolic" />
                                 <Line type="monotone" dataKey="diastolic" stroke="#6366f1" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: "hsl(var(--background))" }} activeDot={{ r: 6 }} name="Diastolic" />
                             </ComposedChart>
-                        ) : metric === "sugar" ? (
+                        ) : activeMetric === "sugar" ? (
                             <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }} barGap={2} barSize={20}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                                 <XAxis dataKey="index" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} />
@@ -126,7 +130,7 @@ const HealthTrendChart = ({ logs }: HealthTrendChartProps) => {
                                 <Bar dataKey="fasting" fill="#10b981" radius={[4, 4, 0, 0]} name="Fasting" />
                                 <Bar dataKey="postmeal" fill="#14b8a6" radius={[4, 4, 0, 0]} name="Post-meal" />
                             </BarChart>
-                        ) : metric === "weight" ? (
+                        ) : activeMetric === "weight" ? (
                             <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                 <defs>
                                     <linearGradient id="weightColor" x1="0" y1="0" x2="0" y2="1">
