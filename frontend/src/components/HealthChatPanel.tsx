@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-    MessageSquare, Send, Loader2, Bot, User, Volume2, Sparkles,
+    MessageSquare, Send, Loader2, Bot, User, Volume2, Sparkles, Play, Pause,
 } from "lucide-react";
 
 export interface HealthChatMessage {
@@ -42,6 +42,7 @@ const HealthChatPanel = ({ sessionId, hasLogs, chronicDisease }: HealthChatPanel
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [playingAudio, setPlayingAudio] = useState<string | null>(null);
+    const [isPaused, setIsPaused] = useState(false);
     const bottomRef = useRef<HTMLDivElement>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -96,16 +97,31 @@ const HealthChatPanel = ({ sessionId, hasLogs, chronicDisease }: HealthChatPanel
         }
     };
 
-    const playAudio = (url: string) => {
+    const toggleAudio = (url: string) => {
+        if (playingAudio === url && audioRef.current) {
+            if (audioRef.current.paused) {
+                audioRef.current.play();
+                setIsPaused(false);
+            } else {
+                audioRef.current.pause();
+                setIsPaused(true);
+            }
+            return;
+        }
+
         if (audioRef.current) {
             audioRef.current.pause();
-            audioRef.current = null;
         }
+
         const audio = new Audio(`http://localhost:8000${url}`);
         audioRef.current = audio;
         setPlayingAudio(url);
-        audio.play();
-        audio.onended = () => setPlayingAudio(null);
+        setIsPaused(false);
+        audio.play().catch(console.error);
+        audio.onended = () => {
+            setPlayingAudio(null);
+            setIsPaused(false);
+        };
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -173,14 +189,24 @@ const HealthChatPanel = ({ sessionId, hasLogs, chronicDisease }: HealthChatPanel
                                 {/* Audio player for assistant messages */}
                                 {msg.audio_url && (
                                     <button
-                                        onClick={() => playAudio(msg.audio_url!)}
-                                        className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full transition-all border ${playingAudio === msg.audio_url
+                                        onClick={() => toggleAudio(msg.audio_url!)}
+                                        className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full transition-all border ${playingAudio === msg.audio_url && !isPaused
                                             ? "bg-primary/20 text-primary border-primary/30 animate-pulse"
                                             : "border-border text-muted-foreground hover:text-primary hover:border-primary/30"
                                             }`}
                                     >
-                                        <Volume2 className="w-3 h-3" />
-                                        {playingAudio === msg.audio_url ? "Playing..." : "Listen"}
+                                        {playingAudio === msg.audio_url && !isPaused ? (
+                                            <Pause className="w-3 h-3" />
+                                        ) : playingAudio === msg.audio_url && isPaused ? (
+                                            <Play className="w-3 h-3 ml-0.5" />
+                                        ) : (
+                                            <Volume2 className="w-3 h-3" />
+                                        )}
+                                        {playingAudio === msg.audio_url && !isPaused
+                                            ? "Pause"
+                                            : playingAudio === msg.audio_url && isPaused
+                                                ? "Resume"
+                                                : "Listen"}
                                     </button>
                                 )}
 
