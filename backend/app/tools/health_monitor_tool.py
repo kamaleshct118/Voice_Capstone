@@ -8,7 +8,8 @@
 from typing import List, Optional
 from pydantic import BaseModel
 import redis
-from app.cache.db0_context import append_health_log, get_health_logs
+from app.cache.db0_context import append_health_log
+from app.db.postgres import get_health_logs_by_session
 from app.llm.client import LLMClient
 from app.llm.prompts import HEALTH_ANALYSIS_PROMPT
 from app.llm.formatter import extract_json_from_response
@@ -169,7 +170,10 @@ def analyze_health_trends(
     to generate a structured health summary, recommendations, and daily checklist.
     Uses the dedicated HealthLLMClient.
     """
-    logs = get_health_logs(redis_db0, session_id, limit=30, chronic_disease=chronic_disease)
+    # Pull persistent health logs from Postgres directly to survive app restarts
+    postgres_logs = get_health_logs_by_session(session_id, chronic_disease)
+    # Apply limit
+    logs = postgres_logs[-30:] if postgres_logs else []
 
     if not logs:
         return {
@@ -248,7 +252,8 @@ def get_health_context(session_id: str, redis_db0: redis.Redis) -> ToolOutput:
     Return the last few health log entries as context for the LLM
     when the user asks a health-monitoring-specific question.
     """
-    logs = get_health_logs(redis_db0, session_id, limit=10)
+    postgres_logs = get_health_logs_by_session(session_id)
+    logs = postgres_logs[-10:] if postgres_logs else []
     flagged = threshold_check(logs) if logs else []
 
     result = {

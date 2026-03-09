@@ -8,7 +8,8 @@ import json
 import redis
 from datetime import datetime, timezone
 from typing import Optional
-from app.cache.db0_context import get_context, get_health_logs
+from app.cache.db0_context import get_context
+from app.db.postgres import get_health_logs_by_session
 from app.mcp.router import ToolOutput
 from app.utils.logger import get_logger
 from app.llm.health_client import HealthLLMClient
@@ -37,7 +38,8 @@ def generate_medical_report(
     # 1. Pull data from Redis DB0
     conversation_history = get_context(redis_db0, session_id)
     # Get last 100 entries to ensure we have enough for a solid report/graph
-    health_logs = get_health_logs(redis_db0, session_id, limit=100)
+    postgres_logs = get_health_logs_by_session(session_id, chronic_disease)
+    health_logs = postgres_logs[-100:] if postgres_logs else []
 
     # 2. Determine chronic disease context
     disease_context = chronic_disease or "General health monitoring"

@@ -110,12 +110,14 @@ def get_health_logs_by_session(session_id: str, chronic_disease: str = None):
             query = "SELECT * FROM health_logs WHERE session_id = %s"
             params = [session_id]
             
-            if chronic_disease:
-                # Filter by chronic_disease OR (is null/General)
-                query += " AND (LOWER(chronic_disease) = LOWER(%s) OR chronic_disease = 'None / General Monitoring' OR chronic_disease IS NULL)"
-                params.append(chronic_disease)
-                
-            query += " ORDER BY timestamp ASC"
+            if chronic_disease and chronic_disease.lower() not in ["none / general monitoring", "none", "general", ""]:
+                # Fetch all logs for this disease regardless of session ID to persist across app restarts
+                query = "SELECT * FROM health_logs WHERE LOWER(chronic_disease) = LOWER(%s) ORDER BY timestamp ASC"
+                params = [chronic_disease]
+            else:
+                # Fallback to session_id if no specific disease is active
+                query = "SELECT * FROM health_logs WHERE session_id = %s AND (chronic_disease = %s OR chronic_disease IS NULL OR chronic_disease = '') ORDER BY timestamp ASC"
+                params = [session_id, chronic_disease]
             
             cur.execute(query, tuple(params))
             rows = cur.fetchall()
@@ -182,11 +184,18 @@ def get_doctor_advices_by_disease(session_id: str, chronic_disease: str):
         return []
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute("""
-                SELECT point as content, timestamp FROM doctor_advice 
-                WHERE session_id = %s AND LOWER(chronic_disease) = LOWER(%s)
-                ORDER BY timestamp DESC
-            """, (session_id, chronic_disease))
+            if chronic_disease and chronic_disease.lower() not in ["none / general monitoring", "general", "none", ""]:
+                cur.execute("""
+                    SELECT point as content, timestamp FROM doctor_advice 
+                    WHERE LOWER(chronic_disease) = LOWER(%s)
+                    ORDER BY timestamp DESC
+                """, (chronic_disease,))
+            else:
+                cur.execute("""
+                    SELECT point as content, timestamp FROM doctor_advice 
+                    WHERE session_id = %s AND (chronic_disease = %s OR chronic_disease IS NULL)
+                    ORDER BY timestamp DESC
+                """, (session_id, chronic_disease))
             rows = cur.fetchall()
 
             result = []
@@ -209,10 +218,16 @@ def delete_doctor_advices_by_disease(session_id: str, chronic_disease: str):
         return
     try:
         with conn.cursor() as cur:
-            cur.execute("""
-                DELETE FROM doctor_advice 
-                WHERE session_id = %s AND LOWER(chronic_disease) = LOWER(%s)
-            """, (session_id, chronic_disease))
+            if chronic_disease and chronic_disease.lower() not in ["none / general monitoring", "general", "none", ""]:
+                cur.execute("""
+                    DELETE FROM doctor_advice 
+                    WHERE LOWER(chronic_disease) = LOWER(%s)
+                """, (chronic_disease,))
+            else:
+                cur.execute("""
+                    DELETE FROM doctor_advice 
+                    WHERE session_id = %s AND (chronic_disease = %s OR chronic_disease IS NULL)
+                """, (session_id, chronic_disease))
         conn.commit()
     except Exception as e:
         logger.error(f"Error deleting doctor advice from Postgres: {e}")
@@ -226,8 +241,7 @@ def delete_health_logs_by_disease(session_id: str, chronic_disease: str):
         return
     try:
         with conn.cursor() as cur:
-            # If disease is "None / General Monitoring", we might need to handle NULLs or explicit strings
-            if chronic_disease.lower() in ["none / general monitoring", "general", "none"]:
+            if chronic_disease.lower() in ["none / general monitoring", "general", "none", ""]:
                 cur.execute("""
                     DELETE FROM health_logs 
                     WHERE session_id = %s AND (chronic_disease = %s OR chronic_disease IS NULL OR chronic_disease = '')
@@ -235,8 +249,8 @@ def delete_health_logs_by_disease(session_id: str, chronic_disease: str):
             else:
                 cur.execute("""
                     DELETE FROM health_logs 
-                    WHERE session_id = %s AND LOWER(chronic_disease) = LOWER(%s)
-                """, (session_id, chronic_disease))
+                    WHERE LOWER(chronic_disease) = LOWER(%s)
+                """, (chronic_disease,))
         conn.commit()
     except Exception as e:
         logger.error(f"Error deleting health logs from Postgres: {e}")

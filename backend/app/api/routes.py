@@ -532,8 +532,11 @@ async def health_chat(body: HealthChatRequest, request: Request):
     health_llm_client = request.app.state.health_llm_client
     kokoro_engine = request.app.state.kokoro_engine
 
-    # ── Pull health logs from DB0 (history) ───────────────────────────
-    logs = db0_context.get_health_logs(redis_db0, body.session_id, limit=20)
+    # ── Pull health logs from Postgres (persistent) ────────────────────────
+    from app.db.postgres import get_health_logs_by_session
+    postgres_logs = get_health_logs_by_session(body.session_id, body.chronic_disease)
+    logs = postgres_logs[-20:] if postgres_logs else []
+    
     chat_history = db0_context.get_context(redis_db0, f"healthchat:{body.session_id}")
 
     logs_text = (
