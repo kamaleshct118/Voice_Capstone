@@ -1,13 +1,24 @@
-# 🏥 Voice AI Healthcare Assistant - Comprehensive Capstone Presentation Guide
+# 🏥 Voice AI Healthcare Assistant
+
+[![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com/)
+[![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://reactjs.org/)
+[![TypeScript](https://img.shields.io/badge/typescript-%23007ACC.svg?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)](https://www.python.org/)
+[![Redis](https://img.shields.io/badge/redis-%23DD0031.svg?style=for-the-badge&logo=redis&logoColor=white)](https://redis.io/)
+[![Postgres](https://img.shields.io/badge/postgres-%23316192.svg?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Groq](https://img.shields.io/badge/Groq-Cloud-f37021?style=for-the-badge)](https://groq.com/)
 
 > **Project**: Multimodal Voice-Orchestrated Clinical Intelligence System  
 > **Tech Stack**: FastAPI · Faster-Whisper · Groq LLM · Gemini Vision · Kokoro TTS · Redis · PostgreSQL  
 > **Architecture**: MCP (Model Control Plane) with Cache-Augmented Generation (CAG)
 
+This document serves as both the **Capstone Presentation Guide** and the detailed **Project Documentation / README**.
+
 ---
 
 ## 📑 Table of Contents
 
+- [Quick Start & Installation](#0-quick-start--installation)
 1. [Project Overview](#1-project-overview)
 2. [System Architecture](#2-system-architecture)
 3. [Models Used & Justification](#3-models-used--justification)
@@ -18,6 +29,60 @@
 8. [Complete Project Flow](#8-complete-project-flow)
 9. [Performance Optimizations](#9-performance-optimizations)
 10. [Technical Challenges & Solutions](#10-technical-challenges--solutions)
+11. [Presentation Tips for Judges](#11-presentation-tips-for-judges)
+12. [Conclusion](#12-conclusion)
+
+---
+
+## 0. Quick Start & Installation
+
+### Prerequisites
+- Python 3.10+
+- Node.js 18+ (with npm, yarn, pnpm, or bun)
+- Redis Server (running on localhost:6379)
+- PostgreSQL (Docker or local instance)
+- API Keys: Groq, Gemini (and others as required)
+
+### Setup Instructions
+
+**Backend Setup:**
+```bash
+cd backend
+python -m venv venv
+# On Windows:
+venv\Scripts\activate
+# On macOS/Linux:
+source venv/bin/activate
+
+pip install -r requirements.txt
+cp .env.example .env
+# Edit .env and supply required passwords and API keys
+```
+
+**Database (Redis & Postgres):**
+Ensure Redis is running.
+Ensure PostgreSQL is running and initialize the backend database.
+
+**Frontend Setup:**
+```bash
+cd frontend
+bun install # Or use npm install
+```
+
+### Running the Application
+
+**Run Backend:**
+```bash
+cd backend
+# Using start.bat (Windows) or directly:
+uvicorn app.main:app --reload --port 8000
+```
+
+**Run Frontend:**
+```bash
+cd frontend
+bun run dev # Or use npm run dev
+```
 
 ---
 
