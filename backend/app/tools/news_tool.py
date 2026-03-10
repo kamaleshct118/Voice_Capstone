@@ -192,14 +192,11 @@ def get_medical_news(entities: dict, redis_db1: redis.Redis, llm_client=None) ->
     Full RAG pipeline:
       parse query → expand → fetch → rank → summarize → cache → return ToolOutput
     """
+    import random
     topic = entities.get("disease") or entities.get("drug") or entities.get("topic") or "medical health"
-    key = build_cache_key("medical_news_rag", topic)
-
-    # ── Cache hit ─────────────────────────────────────────────────────────────
-    cached = get_cached_chunk(redis_db1, key)
-    if cached:
-        logger.info(f"[NewsRAG] Cache HIT for: {topic}")
-        return ToolOutput(tool_name="medical_news", result=cached, error=None)
+    
+    # Bypass cache to always provide fresh and different news
+    logger.info(f"[NewsRAG] Processing news request for: {topic} (Cache Bypassed)")
 
     # ── Build Groq client for RAG ─────────────────────────────────────────────
     groq_client = Groq(api_key=settings.groq_api_key)
@@ -220,7 +217,7 @@ def get_medical_news(entities: dict, redis_db1: redis.Redis, llm_client=None) ->
                     params={"category": "health", "language": "en", "apiKey": settings.news_api_key},
                     timeout=10
                 )
-                raw_articles = fallback_resp.json().get("articles", [])[:10]
+                raw_articles = fallback_resp.json().get("articles", [])[:15]
                 logger.info(f"[NewsRAG] Fallback returned {len(raw_articles)} articles")
             except Exception:
                 pass
@@ -236,7 +233,11 @@ def get_medical_news(entities: dict, redis_db1: redis.Redis, llm_client=None) ->
             return ToolOutput(tool_name="medical_news", result=result, error="No articles found")
 
         # Step 3: Rank
-        ranked_articles = _rank_articles(raw_articles, parsed, top_n=5)
+        ranked_articles = _rank_articles(raw_articles, parsed, top_n=15)
+        
+        # Randomize selection from the top ranked articles to provide different answers
+        if len(ranked_articles) > 5:
+            ranked_articles = random.sample(ranked_articles, 5)
 
         # Step 4: Summarize top ranked articles
         summarized = []
@@ -253,9 +254,7 @@ def get_medical_news(entities: dict, redis_db1: redis.Redis, llm_client=None) ->
             "success": True
         }
 
-        # Cache result
-        store_chunk(redis_db1, key, result, ttl=settings.ttl_news)
-        logger.info(f"[NewsRAG] Stored {len(summarized)} summarized articles in cache for '{topic}'")
+        # Removed caching step to ensure fresh news every time
 
         return ToolOutput(tool_name="medical_news", result=result, error=None)
 
