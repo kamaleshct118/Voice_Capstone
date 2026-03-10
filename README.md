@@ -175,28 +175,55 @@ Nominatim and Overpass API (OpenStreetMap) fetching dynamic lat/long calculation
 
 ### Prerequisites
 - Python 3.10+
-- Node.js 18+ (bun/npm)
-- Redis Server (`localhost:6379`)
-- PostgreSQL
+- Node.js 18+ (npm/bun)
+- Docker Desktop (for Database & Cache)
 
-### 8.1 Backend Setup
+### 8.1 Frontend Setup
 
+1. Open a new terminal and navigate to the frontend directory:
+```bash
+cd frontend
+```
+
+2. Install package dependencies:
+```bash
+npm install
+# or bun install
+```
+
+3. Start the Vite development server:
+```bash
+npm run dev
+# or bun run dev
+```
+
+4. Visit `http://localhost:5173/` in your browser.
+
+### 8.2 Backend Setup
+
+1. Open a second terminal and navigate to the backend directory:
 ```bash
 cd backend
-
-# Create and activate virtual environment
-python -m venv venv
-venv\Scripts\activate      # Windows
-# source venv/bin/activate # macOS/Linux
-
-# Install dependencies (incorporating PyAV, local ML, Librosa)
-pip install -r requirements.txt
-
-# Duplicate env configs
-cp .env.example .env
 ```
-Ensure your `.env` contains valid pointers for Groq, Gemini and local DB setups:
 
+2. Create and activate a virtual environment:
+```bash
+python -m venv venv
+
+# Windows
+venv\Scripts\activate      
+
+# macOS/Linux
+# source venv/bin/activate 
+```
+
+3. Install requirements (incorporating PyAV, local ML, Librosa):
+```bash
+pip install -r requirements.txt
+```
+
+4. Set up environment variables:
+Create a `.env` file in the `backend` directory based on `.env.example` and add your API keys:
 ```env
 GROQ_API_KEY=your_groq_api_key_here
 GEMINI_API_KEY=your_gemini_api_key_here
@@ -211,24 +238,31 @@ REDIS_HOST=localhost
 REDIS_PORT=6379
 ```
 
-Run Backend:
+5. Run the ASGI server:
 ```bash
-uvicorn app.main:app --reload --port 8000
+python run.py
+# or uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 8.2 Frontend Setup
+### 8.3 Docker Setup (PostgreSQL & Redis)
 
+For quick deployment of your database and caching layer, leverage Docker using the root `docker-compose.yml`.
+
+1. Open a third terminal in the root of the project directory.
+
+2. Start the services:
 ```bash
-cd frontend
-
-# Install package dependencies 
-bun install
-
-# Start Vite Runtime
-bun run dev
+docker-compose up -d
 ```
 
-Visit `http://localhost:5173/` in your browser.
+This spins up:
+- **Redis Server** on port `6379` (for DB0 Session Memory & DB1 CAG tool caching).
+- **PostgreSQL Database** on port `5433` (as matching the `POSTGRES_PORT` in your `.env`).
+
+3. Stop the services when done:
+```bash
+docker-compose down
+```
 
 ---
 
