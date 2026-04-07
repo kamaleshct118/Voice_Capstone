@@ -83,7 +83,9 @@ Return JSON:
 def _expand_query(query: str) -> str:
     """Append biomedical expansion terms to the query for broader news coverage."""
     expansion = " OR ".join(QUERY_EXPANSION_TERMS)
-    return f"{query} OR {expansion}"
+    # Safely group the query and expansion terms so NewsAPI doesn't over-broaden
+    safe_query = query.replace('"', '').strip()
+    return f'("{safe_query}") AND ({expansion})'
 
 
 def _fetch_articles(parsed_query: dict, page_size: int = 20) -> List[dict]:
